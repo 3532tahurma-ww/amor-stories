@@ -41,6 +41,7 @@ Stories.PHOTO_SETS = [
   { id: "Parla_2", dir: "", profile: "6d6659cd6be0ef54b6f1bf33c8491eec.jpg", photos: ["a5fa66bd756f36801750a9dae28fb684.jpg", "fef14e8b032fe86ae9f1f674a847cad6.jpg"] },
   { id: "Parla_3", dir: "", profile: "783654947_1060325456710756_8945356022536569727_n.jpg", photos: [] },
   { id: "Petek", dir: "", profile: "2554864d76561368894cf8ecbae3e156.jpg", photos: ["be29f009285921e9bdf832ff511b4e8c.jpg", "d6b6ce6834a09214b7a20f767075f054.jpg"] },
+  { id: "Red_1", dir: "", profile: "0771f210137ca7027c32a6e6ad36895f.jpg", photos: ["0e260ba22e57654f59f5c15494a2501e.jpg", "8a5a5530c836da95fad9b838cdfd4697.jpg", "96dc3a809eee3a1a2a0e4528b023e9db.jpg"] },
   { id: "seda", dir: "", profile: "0e308ecd9ef6c0eb934b47e41f6f1333.jpg", photos: ["34d147a16dea4068c14046e2c83ec37e.jpg", "5d9c6254ae1a9c65af60cf984443ff05.jpg", "6c6eddd2a4ef861a905ead5b7626a000.jpg", "9e2931c398e9bf06dbf2094050c00bf2.jpg", "ab0c27837e71bb45ffe3790b9d88590d.jpg", "c501b61c2c31d0f397f68852365cc177.jpg"] },
   { id: "Selen", dir: "", profile: "583c10c92acf57a79bfc7497442a51c8.jpg", photos: ["71ba1eb464cbd0120b0ac1a3cc66b4ec.jpg", "a872f1a6d07b52094c9821e69bf4c301.jpg", "f1899e867c8bc6e9812ef3a77a61b2f0.jpg"] },
   { id: "selin", dir: "", profile: "31e18f7bf8e22cb8e47e4bc5b5ac30a8.jpg", photos: ["6ce17b973085bb170d9397f8d86bbf56.jpg", "c2d07927b446fa905d33e69f82e9b4e8.jpg", "cead0dc329dbbe1e219ed033fc0682bc.jpg"] },
