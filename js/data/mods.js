@@ -2,6 +2,7 @@
  * Karakter modları: Oluştur ekranındaki "Hazır karakterler" paketleri.
  *   amor      -> characters/ klasöründeki fotoğraf setleri (js/data/photos.js), özellikler 🎲 ile
  *   dontstop  -> Don't Stop oyununun karakterleri (mods/dontstop/), profil, kişilik ve sahne hazır
+ *   carmen    -> kendi karakter setin: mods/carmen/<karakter>/ klasörlerinden taranır (bkz. mods/carmen/OKUBENI.md)
  * Yeni mod eklemek: görselleri mods/<mod>/ altına koy, aşağıya { id, name, icon, desc, characters } ekle.
  * Karakter alanları Oluştur ekranındakilerle aynıdır; `bg` sohbetin varsayılan arka planı olur.
  */
@@ -16,8 +17,38 @@ Stories.MODS = (() => {
     bg: o.bg ? `${D}bg_${o.bg}.jpg` : ''
   });
 
+  // Klasörden taranan mod karakteri: görseller mods/<mod>/<anahtar>/ içinde, listesi js/data/mod-photos.js'te
+  // (fotograflari-guncelle.bat üretir). Resim yoksa avatar adın baş harfi ve renkle görünür.
+  const scanned = (mod, key, o) => {
+    const f = ((Stories.MOD_PHOTOS || {})[mod] || {})[key] || { profile: '', bg: '', photos: [] };
+    const url = p => (p ? encodeURI(p) : '');
+    return Object.assign({ key, gender: '♀', age: '', city: '', zodiac: '', job: '', bio: '', traits: [], about: '' }, o, {
+      photo: url(f.profile),
+      album: [f.bg, f.profile, ...f.photos].filter(Boolean).map(url),
+      bg: url(f.bg)
+    });
+  };
+  const Y = 'carmen';
+
   return [
     { id: 'amor', name: 'Amor', icon: '💜', desc: 'Fotoğraf setleri · özellikleri 🎲 ile belirle' },
+    {
+      // Adı değiştirmek için sadece name'i düzenle. Kategori ikonu: bir resim yolu (ör. 'mods/carmen/vesper/profil.png') ya da emoji.
+      // Karakter alanları: job, age, city, zodiac, bio (kısa durum), traits (js/data/traits.js'teki etiketler ya da serbest metin), about (uzun açıklama)
+      id: Y, name: 'Carmen', icon: '🌙', desc: 'Kendi çizdiğin karakterler · resimleri mods/carmen/<karakter>/ klasörüne ekle',
+      characters: [
+        scanned(Y, 'maelys', { name: 'Maëlys Virelle', colors: ['#f7a8c8', '#e0628f'] }),
+        scanned(Y, 'romilly', { name: 'Romilly Finch', colors: ['#ffd29a', '#f2994a'] }),
+        scanned(Y, 'vesper', { name: 'Vesper Laine', colors: ['#b9a6ff', '#6c4ee0'] }),
+        scanned(Y, 'anwen', { name: 'Anwen Lorne', colors: ['#a8e6cf', '#3fb68b'] }),
+        scanned(Y, 'cressida', { name: 'Cressida Vale', colors: ['#f6a6a6', '#d64545'] }),
+        scanned(Y, 'ottilie', { name: 'Ottilie Wycliffe', colors: ['#fbe38e', '#d4a437'] }),
+        scanned(Y, 'lenora', { name: 'Lenora Whitcombe', colors: ['#9fd3f5', '#2f80ed'] }),
+        scanned(Y, 'leonie', { name: 'Leonie Ashcroft', colors: ['#d7c0a8', '#8d6e63'] }),
+        scanned(Y, 'octavia', { name: 'Octavia Gravesend', colors: ['#9aa5b8', '#3c4659'] }),
+        scanned(Y, 'isabeau', { name: 'Isabeau Quill', colors: ['#e2b3f5', '#a855c7'] })
+      ]
+    },
     {
       id: 'dontstop', name: "Don't Stop", icon: `${D}icon_luna.png`, desc: 'Oyunun karakterleri · profil ve kişilik hazır',
       characters: [

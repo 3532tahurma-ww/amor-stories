@@ -54,7 +54,14 @@ Stories.Store = (() => {
     return s;
   }
 
-  const fill = data => migrate(Object.assign(defaults(), data, data && !data.threads ? { threads: undefined } : {}));
+  // "yeni-set" modunun adı "carmen" oldu: kayıtlı karakterlerdeki mod/set adları ve resim yolları çevrilir
+  const renameMod = data => {
+    if (!data) return data;
+    const s = JSON.stringify(data);
+    return s.includes('yeni-set') ? JSON.parse(s.split('mods/yeni-set/').join('mods/carmen/')
+      .split('"yeni-set:').join('"carmen:').split('"mod":"yeni-set"').join('"mod":"carmen"')) : data;
+  };
+  const fill = data => migrate(Object.assign(defaults(), renameMod(data), data && !data.threads ? { threads: undefined } : {}));
   let state = fill(read(KEY));
 
   // Kota dolarsa false döner

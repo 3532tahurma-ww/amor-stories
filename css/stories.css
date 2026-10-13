@@ -324,3 +324,10 @@ button.chip { border: 0; cursor: pointer; }
 .kw-sum { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
 .kw-sum .chips { flex: 1; }
 .kw-globe { width: 28px; text-align: center; font-size: 18px; flex: none; }
+
+/* Resmi henüz eklenmemiş hazır karakter */
+.set .set-ph {
+  width: 78px; height: 104px; border-radius: 14px; border: 3px solid transparent;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 34px; font-weight: 900;
+}
+.set.on .set-ph { border-color: var(--purple); transform: scale(1.04); }

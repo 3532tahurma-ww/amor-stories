@@ -1741,7 +1741,7 @@
   function presets(modId) {
     if (modId === 'amor') return SETS.map(s => ({ id: s.id, name: setName(s), thumb: photoUrl(s, s.profile), apply: d => applySet(d, s) }));
     const m = modOf(modId);
-    return (m.characters || []).map(p => ({ id: `${m.id}:${p.key}`, name: p.name, thumb: p.photo, apply: d => applyPreset(d, m, p) }));
+    return (m.characters || []).map(p => ({ id: `${m.id}:${p.key}`, name: p.name, thumb: p.photo || p.album[0], colors: p.colors, apply: d => applyPreset(d, m, p) }));
   }
 
   // 🎲: tek alanı ya da ('all') hepsini rastgele belirler
@@ -1813,7 +1813,8 @@
           <div class="sets">
             ${list.map(p => `
               <button type="button" class="set ${p.id === d.set ? 'on' : ''} ${used.has(p.id) ? 'used' : ''}" data-set="${esc(p.id)}">
-                <img src="${esc(p.thumb)}" alt="" loading="lazy">
+                ${p.thumb ? `<img src="${esc(p.thumb)}" alt="" loading="lazy">`
+                  : `<div class="set-ph" style="background:${esc(grad(p))}">${initial(p.name)}</div>`}
                 <span>${used.has(p.id) ? 'kullanımda' : esc(p.name)}</span>
               </button>`).join('') || '<div class="empty" style="padding:16px">Bu modda karakter yok</div>'}
           </div>

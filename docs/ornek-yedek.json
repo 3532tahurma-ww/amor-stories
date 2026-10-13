@@ -1,0 +1,78 @@
+{
+  "format": "amor-stories-backup",
+  "version": 1,
+  "state": {
+    "user": { "name": "Deniz", "age": "24", "city": "İzmir", "photo": "" },
+    "characters": [
+      {
+        "id": "c_mia",
+        "set": "dontstop:mia",
+        "mod": "dontstop",
+        "name": "Mia",
+        "gender": "♀",
+        "age": "28",
+        "city": "",
+        "job": "Yoga eğitmeni",
+        "zodiac": "Terazi",
+        "bio": "Nefes al... nefes ver. Daha iyi mi?",
+        "traits": ["Neşeli", "Sakin", "Korumacı", "Emoji sever"],
+        "tags": ["komşu"],
+        "about": "Sıcak, anaç ve huzurlu. Herkese \"tatlım\" der, hemen çay koyar.",
+        "photo": "mods/dontstop/icon_mia.png",
+        "album": ["mods/dontstop/bg_livingroom_mia_sitting.jpg", "mods/dontstop/portrait_mia.png"],
+        "colors": ["#b8e69c", "#96d874"],
+        "theme": { "bg": "img", "img": "mods/dontstop/bg_livingroom_mia_sitting.jpg", "bubble": "amor" },
+        "created": 1760000000000
+      },
+      {
+        "id": "c_kerem",
+        "set": "",
+        "mod": "amor",
+        "name": "Kerem",
+        "gender": "♂",
+        "age": "27",
+        "city": "İstanbul",
+        "job": "Mimar",
+        "zodiac": "Oğlak",
+        "bio": "az konuşur çok düşünür",
+        "traits": ["Ciddi", "Gizemli", "Kısa yazar", "Hep küçük harf"],
+        "tags": ["ex sevgili"],
+        "about": "Deniz'in eski sevgilisi. Mia ile aynı apartmanda oturuyor.",
+        "photo": "",
+        "album": [],
+        "colors": ["#5fb4ff", "#2f6bff"],
+        "created": 1760000001000
+      }
+    ],
+    "threads": [
+      { "id": "t_aksam", "charId": "c_mia", "title": "1. Bölüm: Çay saati", "created": 1760000100000, "opened": 0 },
+      {
+        "id": "g_apartman", "group": true, "members": ["c_mia", "c_kerem"], "title": "Apartman 🏠",
+        "created": 1760000200000, "opened": 0,
+        "theme": { "bg": "night", "bubble": "char" },
+        "memberColors": { "c_kerem": 2 }
+      }
+    ],
+    "chats": {
+      "t_aksam": [
+        { "id": "m1", "from": "sys", "text": "Salı akşamı, yağmur yağıyor", "ts": 1760000100000 },
+        { "id": "m2", "from": "her", "text": "Çay demledim tatlım, gelsene ☕", "ts": 1760000160000 },
+        { "id": "m3", "from": "me", "text": "Geliyorum! Kerem de evde mi?", "ts": 1760000220000 },
+        { "id": "m4", "from": "her", "text": "Bilmiyorum... neden sordun?", "ts": 1760000280000, "reply": "m3", "react": "😮" },
+        { "id": "m5", "from": "her", "type": "photo", "src": "mods/dontstop/portrait_mia.png", "text": "Bak yeni kıyafetim", "ts": 1760000340000, "effect": "hearts" }
+      ],
+      "g_apartman": [
+        { "id": "g1", "from": "her", "who": "c_kerem", "text": "kapıdaki paket kimin", "ts": 1760000200000 },
+        { "id": "g2", "from": "her", "who": "c_mia", "text": "Benim! Çay ısmarlarım tatlım 💚", "ts": 1760000260000 },
+        { "id": "g3", "from": "me", "text": "Bana da çay var mı?", "ts": 1760000320000, "effect": "shake" }
+      ]
+    },
+    "side": { "t_aksam": "me", "g_apartman": "c_kerem" },
+    "turns": { "g_apartman": true },
+    "pinned": ["c_mia"],
+    "keywords": [
+      { "id": "k1", "charId": "c_mia", "word": "tatlım", "effect": "glow" },
+      { "id": "k2", "charId": "c_mia", "word": "çay", "effect": "" }
+    ]
+  }
+}
