@@ -20,6 +20,9 @@ js/data/photos.js   fotoğraf setleri listesi (otomatik üretilir)
 js/data/mods.js     karakter modları (Amor, Don't Stop)
 js/data/themes.js   sohbet arka planları ve baloncuk stilleri
 mods/dontstop/      Don't Stop karakter görselleri (küçültülmüş)
+mods/carmen/      Carmen: karakter başına bir klasör (resimleri sen eklersin)
+js/data/mod-photos.js  mod klasörlerinin resim listesi (otomatik üretilir)
+tools/build-mods.ps1   mods/<mod>/<karakter>/ klasörlerini tarar
 js/app.js           ekranlar: ana sayfa, mesajlar, profil, sohbet, karakter oluştur, ben
 characters/<set>/   hazır karakter fotoğraf setleri (Amor'dan)
 tools/build-photos.ps1, fotograflari-guncelle.bat   js/data/photos.js'i üretir
@@ -30,6 +33,7 @@ tools/build-photos.ps1, fotograflari-guncelle.bat   js/data/photos.js'i üretir
 Oluştur ekranındaki **Hazır karakterler** kartında mod seçilir:
 
 - **Amor:** `characters/` klasöründeki fotoğraf setleri; özellikler 🎲 ile belirlenir.
+- **Carmen:** kendi karakter setin (Maëlys Virelle, Romilly Finch, Vesper Laine, Anwen Lorne, Cressida Vale, Ottilie Wycliffe, Lenora Whitcombe, Leonie Ashcroft, Octavia Gravesend, Isabeau Quill). Resimleri `mods/carmen/<karakter>/` klasörlerine koyup `fotograflari-guncelle.bat`'ı çalıştır; ayrıntılar [mods/carmen/OKUBENI.md](mods/carmen/OKUBENI.md).
 - **Don't Stop:** oyunun 10 karakteri (Ava, Claire, Luna, Roxy, Chloe, Scarlett, Liza, Ash, Mia, Lily). İkon, portre, duygu portreleri, meslek, kişilik, "Hakkında" ve sohbet arka planı (oyundaki sahnesi) hazır gelir. **➕ Tüm Don't Stop karakterlerini ekle** ile hepsi tek seferde eklenir.
 
 Görseller `mods/<mod>/` altında, mod tanımları `js/data/mods.js` içinde. Yeni mod eklemek için görselleri `mods/<yeni-mod>/` klasörüne koyup `js/data/mods.js`'e bir giriş eklemek yeterli.
@@ -78,6 +82,10 @@ Oluştur ekranının en üstünde `characters/` klasöründeki fotoğraf setleri
 Sohbet listesinde bir sohbete basılı tut (masaüstünde sağ tık) → en üste sabitle (en fazla 4).
 
 Veriler tarayıcıda (localStorage) saklanır. Başka cihaza taşımak için **Ben → Yedekle / Yedekten yükle**.
+
+## Yedek dosyası ve yapay zeka
+
+**Ben → 💾 Yedekle** ile inen JSON dosyasının yapısı [docs/YEDEK-JSON.md](docs/YEDEK-JSON.md) içinde anlatılıyor; örnek: [docs/ornek-yedek.json](docs/ornek-yedek.json). Dosyayı bu belgeyle birlikte başka bir yapay zekaya verip hikayeyi devam ettirtebilir, yeni karakter ya da grup ekletebilir ve **📂 Yedekten yükle** ile geri alabilirsin.
 
 ## Telefona yükleme (PWA)
 
