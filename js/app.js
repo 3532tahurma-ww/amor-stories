@@ -19,6 +19,7 @@
 
   const ui = { homeTab: 'all', profileTab: 'profile', route: null, create: null };
   let playTimer = null;
+  let botTimer = null; // 🤖 bot cevabı bekleniyor
 
   /* ---------- İkonlar ---------- */
   const ICON = {
@@ -27,6 +28,7 @@
     more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg>',
     edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
     search: '<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>',
+    photo: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/></svg>',
     send: '<svg viewBox="0 0 24 24"><path d="M3.4 11.1 19.6 3.6c.9-.4 1.8.5 1.4 1.4l-7.5 16.2c-.4.9-1.7.8-2-.1l-1.6-5.4a1 1 0 0 0-.6-.6L3.9 13.5c-.9-.3-1-1.6-.1-2z"/></svg>',
     chat: '<svg viewBox="0 0 24 24"><path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5v6a3.5 3.5 0 0 1-3.5 3.5H11l-4.3 3.4c-.6.5-1.5 0-1.5-.7V16A3.5 3.5 0 0 1 4 12.5z"/><circle cx="9.5" cy="9.5" r="1.2" fill="#fff"/><circle cx="14.5" cy="9.5" r="1.2" fill="#fff"/></svg>',
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
@@ -215,6 +217,7 @@
     document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('active', a.dataset.tab === r.name && !full));
     document.querySelectorAll('.sheet-wrap, .lightbox').forEach(el => el.remove());
     clearTimeout(playTimer);
+    clearTimeout(botTimer);
     window.scrollTo(0, 0);
 
     if ((r.name === 'p' && !c) || (r.name === 'chat' && !(t && (t.group || c)))) { location.hash = '#/home'; return; }
@@ -575,6 +578,16 @@
     bindTab();
     $('#newChat').onclick = () => createThread(c);
     $('#goChat').onclick = () => openChat(c);
+    // Albümden profil fotoğrafı seç
+    $('#ptab').addEventListener('click', e => {
+      const b = e.target.closest('[data-pp]');
+      if (!b) return;
+      c.photo = c.album[+b.dataset.pp];
+      save();
+      notify('Profil fotoğrafı değişti', '👤');
+      ui.profileTab = 'album';
+      refresh();
+    });
 
     // 🏷️ Etiketler: "+ etiket" yazarak ekler, etikete dokununca kaldırır
     function refresh() { const y = window.scrollY; renderProfile(c); window.scrollTo(0, y); }
@@ -614,7 +627,9 @@
   function profileTab(c) {
     if (ui.profileTab === 'album') {
       if (!c.album.length) return `<div class="empty">Albüm boş<br><a href="#/create/${c.id}" style="color:var(--pink)">Fotoğraf ekle</a></div>`;
-      return `<div class="album">${c.album.map((src, i) => `<div style="background:${grad(c)}"><img src="${esc(src)}" alt="" loading="lazy" data-zoom="${i}"></div>`).join('')}</div>`;
+      return `<div class="album">${c.album.map((src, i) => `<div class="al-item" style="background:${grad(c)}"><img src="${esc(src)}" alt="" loading="lazy" data-zoom="${i}">
+          ${src === c.photo ? '<span class="al-pp on">👤 Profil</span>' : `<button type="button" class="al-pp" data-pp="${i}">👤 Profil yap</button>`}</div>`).join('')}</div>
+        <small class="mc-hint">Bir fotoğrafı profil fotoğrafı yapmak için altındaki “Profil yap”a dokun. Avatar ortadan kırpılarak gösterilir.</small>`;
     }
     if (ui.profileTab === 'keys') {
       const ks = keywords().filter(k => k.charId === c.id);
@@ -980,9 +995,11 @@
         <div class="chat-head">
           <a class="icon-btn" href="#/messages" aria-label="Geri">${ICON.arrowLeft}</a>
           ${head}
+          <button class="icon-btn" id="heroBtn" aria-label="Büyük fotoğraf">${ICON.photo}</button>
           <button class="icon-btn" id="searchBtn" aria-label="Sohbette ara">${ICON.search}</button>
           <button class="icon-btn" id="moreBtn" aria-label="Menü">${ICON.more}</button>
         </div>
+        <div class="hero" id="hero" hidden></div>
         <div class="search-bar" id="searchBar" hidden>
           <input id="sq" type="search" placeholder="Sohbette ara…" autocomplete="off">
           <span id="sCount"></span>
@@ -1061,6 +1078,12 @@
       $('[data-tool=fx]').classList.toggle('on', !!nf);
       $('#composer .send-btn').classList.toggle('fx-armed', !!nf);
       if (nf) $('#sideHint').innerHTML += ` · <span class="fx-next">${nf.icon} ${esc(nf.label)} ile gidecek <button type="button" id="fxClear" aria-label="Efekti kaldır">✕</button></span>`;
+      if (th.autoAdd) $('#sideHint').innerHTML += ` · <span class="add-on">🪄 Ekler açık <button type="button" id="addOff" aria-label="Otomatik ekleri kapat">✕</button></span>`;
+      const ao = $('#addOff');
+      if (ao) ao.onclick = () => { th.autoAdd = false; save(); drawComposer(); };
+      if (th.bot) $('#sideHint').innerHTML += ` · <span class="bot-on">🤖 Bot açık <button type="button" id="botOff" aria-label="Bot modunu kapat">✕</button></span>`;
+      const bo = $('#botOff');
+      if (bo) bo.onclick = () => { th.bot = false; save(); clearTimeout(botTimer); drawComposer(); };
       const fc = $('#fxClear');
       if (fc) fc.onclick = () => { cs.nextFx = null; drawComposer(); };
       const n = list.filter(m => m.from !== 'sys').length;
@@ -1157,16 +1180,83 @@
           list.splice(i < 0 ? list.length : i, 0, m);
           target = m.id;
         } else list.push(m);
+        applyAddons(m);
       }
       save();
+      // 🤖 Bot modu: kullanıcının (sona eklenen) mesajına karakter kurallardan cevap verir; taraf "Sen"de kalır
+      const botTurn = th.bot && cs.side === 'me' && newId && !target;
       if (cs.side === 'sys') setSide(cs.before || 'me');
-      else if (turns() && !editing) setSide(nextKey(keyOf()));
+      else if (turns() && !editing && !botTurn) setSide(nextKey(keyOf()));
       else drawComposer();
       drawMode();
       drawReply();
       draw(target);
       refreshList();
+      if (group) drawHero();
       if (newId) { const m = list.find(x => x.id === newId); playFx(box.querySelector(`[data-id="${newId}"]`), m && fxOf(m)); }
+      if (botTurn) botReply(list.find(x => x.id === newId));
+    }
+
+    /* ---------- 🪄 Otomatik ekler: karakterin mesajında kelime/fiil geçerse sonuna ek ya da ayrı mesaj ----------
+     * Bot modundan bağımsız; sohbet ⋮ menüsünden açılır (th.autoAdd). Tanımlar: js/data/bot-rules.js → addons */
+    function applyAddons(m) {
+      if (!th.autoAdd || m.from !== 'her' || m.type) return;
+      const ch = byId(group ? m.who : c.id);
+      if (!ch) return;
+      const res = Stories.Bot.addons(Stories.BOT_RULES || {}, m.text, ch);
+      const vars = { sen: userName(), ben: ch.name.split(' ')[0] };
+      const roll = a => a && Math.random() * 100 < (a.chance == null ? 100 : +a.chance);
+      const text = a => (roll(a) ? Stories.Bot.addText(a, vars).trim() : '');
+      const pre = text(res.prepend), post = text(res.append);
+      if (pre && !m.text.trim().startsWith(pre)) m.text = `${pre} ${m.text.trim()}`;
+      if (post && !m.text.trim().endsWith(post)) m.text = `${m.text.trim()} ${post}`;
+      // Ayrı mesajlar: önce (bu mesajın üstüne) ve sonra (altına)
+      const extra = (t, after) => {
+        if (!t) return;
+        const x = { id: Store.uid(), from: 'her', text: t, ts: after ? m.ts + 1 : m.ts };
+        if (group) x.who = m.who;
+        list.splice(list.indexOf(m) + (after ? 1 : 0), 0, x);
+      };
+      extra(text(res.before), false);
+      extra(text(res.message), true);
+    }
+
+    /* ---------- 🤖 Bot modu (kurallar: js/data/bot-rules.js, motor: js/bot.js) ---------- */
+    const BOT = Stories.Bot;
+    function botReply(userMsg) {
+      clearTimeout(botTimer);
+      const old = $('#botTyping');
+      if (old) old.remove();
+      const rules = Stories.BOT_RULES || { rules: [] };
+      // Grupta kuralı en iyi eşleşen üye cevap verir (eşitlikte rastgele)
+      const cands = (group ? members() : [c]).map(ch => ({ ch, m: BOT.best(rules, userMsg.text, ch) })).filter(x => x.m);
+      if (!cands.length) { notify('🤖 Bu karakter için uygun kural yok (bot-editoru.bat)', '🤖'); return; }
+      const topScore = Math.max(...cands.map(x => x.m.score + (x.m.fallback ? 0 : 1000)));
+      const win = cands.filter(x => x.m.score + (x.m.fallback ? 0 : 1000) === topScore);
+      const { ch, m } = win[Math.floor(Math.random() * win.length)];
+      const parts = BOT.reply(m.rule, { sen: userName(), ben: ch.name.split(' ')[0] });
+      const step = i => {
+        if (i >= parts.length) { drawComposer(); return; }
+        box.insertAdjacentHTML('beforeend', `<div class="msg her" id="botTyping">${avatar(ch, 36)}<div class="bubble"><span class="typing-dots"><i></i><i></i><i></i></span></div></div>`);
+        box.scrollTop = box.scrollHeight;
+        setStatus(group ? `${ch.name} yazıyor…` : 'yazıyor…', 'typing');
+        botTimer = setTimeout(() => {
+          const t = $('#botTyping');
+          if (t) t.remove();
+          if (i === 0) snap('Bot cevabı');
+          const msg = { id: Store.uid(), from: 'her', text: parts[i], ts: Math.max(Date.now(), (list[list.length - 1] || {}).ts + 1 || 0) };
+          if (group) msg.who = ch.id;
+          list.push(msg);
+          applyAddons(msg);
+          save();
+          draw();
+          refreshList();
+          if (group) drawHero(ch.id);
+          playFx(box.querySelector(`[data-id="${msg.id}"]`), fxOf(msg));
+          botTimer = setTimeout(() => step(i + 1), 350);
+        }, Math.min(2600, 700 + parts[i].length * 35));
+      };
+      botTimer = setTimeout(() => step(0), 500);
     }
 
     $('#composer').onsubmit = e => {
@@ -1248,6 +1338,78 @@
     }
     const step = d => { if (!sr.hits.length) return; sr.cur = (sr.cur + d + sr.hits.length) % sr.hits.length; markHits(true); };
     $('#searchBtn').onclick = () => ($('#searchBar').hidden ? openSearch() : closeSearch());
+
+    /* ---------- 🖼️ Büyük fotoğraf: sohbetin üstünde karakterin fotoğrafı ----------
+     * Tekli: karakterin fotoğrafı; dokununca albümde sıradakine geçer (seçim sohbete kaydedilir).
+     * Grup: üyeler yan yana; son yazan (Oynat'ta o an yazan) öne çıkar. */
+    const heroPics = ch => [...new Set([ch.photo, ...ch.album].filter(Boolean))];
+    function drawHero(activeId) {
+      const el = $('#hero');
+      const on = !!th.hero;
+      el.hidden = !on;
+      $('.hcard').hidden = on;
+      $('#heroBtn').classList.toggle('on', on);
+      if (!on) return;
+      el.style.height = th.heroH ? clampHero(th.heroH) + 'px' : '';
+      const grip = '<div class="hero-grip" aria-hidden="true"><i></i></div>';
+      if (!group) {
+        const pics = heroPics(c);
+        const i = Math.max(0, pics.indexOf(th.heroImg));
+        el.className = 'hero';
+        el.innerHTML = (pics.length
+          ? `<img src="${esc(pics[i])}" alt="" draggable="false">
+             <div class="hero-cap"><b>${esc(c.name)}</b>${pics.length > 1 ? `<small>${i + 1}/${pics.length} · dokun: değiştir · sürükle: boyut</small>` : '<small>sürükle: boyut</small>'}</div>`
+          : `<div class="hero-empty" style="background:${esc(grad(c))}">${initial(c.name)}<small>Fotoğraf yok</small></div>`) + grip;
+        return;
+      }
+      const ms = members();
+      const lastHer = [...list].reverse().find(m => m.from === 'her');
+      const act = activeId || (lastHer && lastHer.who);
+      el.className = 'hero group';
+      el.innerHTML = ms.map(m => {
+        const p = heroPics(m)[0];
+        return `<a class="hero-m${m.id === act ? ' on' : ''}" href="#/p/${m.id}" style="background:${esc(grad(m))}">
+          ${p ? `<img src="${esc(p)}" alt="" draggable="false">` : `<span class="hero-ini">${initial(m.name)}</span>`}<b>${esc(m.name)}</b></a>`;
+      }).join('') + grip;
+    }
+
+    // Parmakla (ya da fareyle) aşağı/yukarı sürükleyerek yükseklik ayarı; sadece dokunmak eskisi gibi çalışır
+    const clampHero = h => Math.round(Math.max(110, Math.min(h, $('.chat').clientHeight - 230)));
+    let drag = null, dragged = false;
+    $('#hero').addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      drag = { y: e.clientY, h: $('#hero').offsetHeight, id: e.pointerId };
+      dragged = false;
+    });
+    $('#hero').addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dy = e.clientY - drag.y;
+      if (!dragged && Math.abs(dy) < 8) return;
+      if (!dragged) {
+        dragged = true;
+        try { $('#hero').setPointerCapture(e.pointerId); } catch (err) { /* parmak bu arada kalkmış olabilir */ }
+        $('#hero').classList.add('resizing');
+      }
+      $('#hero').style.height = clampHero(drag.h + dy) + 'px';
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      drag = null;
+      $('#hero').classList.remove('resizing');
+      if (dragged) { th.heroH = $('#hero').offsetHeight; save(); }
+    };
+    $('#hero').addEventListener('pointerup', endDrag);
+    $('#hero').addEventListener('pointercancel', endDrag);
+    // Sürüklemeden sonra gelen tıklama fotoğrafı değiştirmesin / profile gitmesin
+    $('#hero').addEventListener('click', e => { if (dragged) { e.preventDefault(); e.stopPropagation(); dragged = false; } }, true);    $('#heroBtn').onclick = () => { th.hero = !th.hero; save(); drawHero(); if (!th.hero) box.scrollTop = box.scrollHeight; };
+    $('#hero').onclick = e => {
+      if (group) return; // grupta üyeye dokununca profili açılır
+      const pics = heroPics(c);
+      if (pics.length < 2) return;
+      th.heroImg = pics[(Math.max(0, pics.indexOf(th.heroImg)) + 1) % pics.length];
+      save();
+      drawHero();
+    };
     $('#sq').oninput = runSearch;
     $('#sq').onkeydown = e => {
       if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? 1 : -1); }
@@ -1537,6 +1699,9 @@
           <button data-a="threads">🗂️ ${esc(c.name)} ile sohbetler</button>
           <button data-a="new">➕ Yeni sohbet</button>
           <button data-a="rename">✏️ Sohbetin adını değiştir</button>`) + `
+        <button data-a="autoadd">🪄 Otomatik ekler: </button>
+        <button data-a="bot">🤖 Bot modu: </button>
+        <button data-a="hero">🖼️ Büyük fotoğrafı </button>
         <button data-a="search">🔍 Sohbette ara</button>
         <button data-a="keywords">🔑 Anahtar kelimeler</button>
         ${stack.length ? `<button data-a="undo">↶ Geri al · ${esc(stack[stack.length - 1].label)}</button>` : ''}
@@ -1555,6 +1720,20 @@
         if (a === 'new') createThread(c);
         if (a === 'rename') renameThread(th, render);
         if (a === 'search') openSearch();
+        if (a === 'hero') $('#heroBtn').click();
+        if (a === 'autoadd') {
+          th.autoAdd = !th.autoAdd;
+          save();
+          if (th.autoAdd) notify('Otomatik ekler açık: karakter mesajlarına kelimeye göre ek yapılır', '🪄');
+          drawComposer();
+        }
+        if (a === 'bot') {
+          th.bot = !th.bot;
+          save();
+          if (th.bot) { setSide('me'); notify(`Bot modu açık: sen yaz, ${group ? 'üyeler' : c.name.split(' ')[0]} kurallardan cevap versin`, '🤖'); }
+          else clearTimeout(botTimer);
+          drawComposer();
+        }
         if (a === 'keywords') keywordSheet({ chars: group ? th.members : [c.id], list, speakerId: sidOf, onChange: () => draw() });
         if (a === 'undo') undo();
         if (a === 'pin') togglePin(pinKey);
@@ -1570,6 +1749,7 @@
     /* Oynat: sohbet baştan, karakter "yazıyor…" diye tek tek gelir. Ekrana dokunmak hızlandırır. */
     function play() {
       if (!list.length) { notify('Oynatmak için önce birkaç mesaj yaz', '▶️'); return; }
+      clearTimeout(botTimer);
       if (!$('#searchBar').hidden) closeSearch();
       const all = list.slice();
       cs.playing = true;
@@ -1589,6 +1769,7 @@
         clearTimeout(playTimer);
         if (typingEl) { typingEl.remove(); typingEl = null; }
         box.insertAdjacentHTML('beforeend', itemHtml(ctx, all[i], all[i - 1]));
+        if (group && all[i].from === 'her') drawHero(all[i].who);
         playFx(box.querySelector(`[data-id="${all[i].id}"]`), fxOf(all[i]));
         i++;
         setStatus(`${i} / ${all.length}`);
@@ -1615,6 +1796,7 @@
         drawComposer();
         draw();
         drawUndo();
+        drawHero();
       }
       box.onpointerdown = () => { if (cs.playing && i < all.length) reveal(); };
       $('#playStop').onclick = stop;
@@ -1623,6 +1805,7 @@
     }
 
     applyTheme();
+    drawHero();
     drawComposer();
     draw();
     drawUndo();
@@ -1836,7 +2019,8 @@
         <div class="ctrl">
           <div class="row2"><span>🖼️ Albüm</span><small>${d.album.length}/${MAX_ALBUM} · ilki kapak olur</small></div>
           <div class="album-strip">
-            ${d.album.map((src, i) => `<div class="ph"><img src="${esc(src)}" alt=""><button type="button" class="rm" data-rm="${i}" aria-label="Sil">✕</button></div>`).join('')}
+            ${d.album.map((src, i) => `<div class="ph${src === d.photo ? ' is-pp' : ''}"><img src="${esc(src)}" alt=""><button type="button" class="rm" data-rm="${i}" aria-label="Sil">✕</button>
+              <button type="button" class="pp" data-setpp="${i}" title="Profil fotoğrafı yap">${src === d.photo ? '👤 Profil' : '👤'}</button></div>`).join('')}
             ${d.album.length < MAX_ALBUM ? '<label class="ph add">+<input type="file" accept="image/*" multiple id="albumIn" hidden></label>' : ''}
           </div>
         </div>
@@ -1868,7 +2052,7 @@
           <input type="text" id="cBio" maxlength="80" value="${esc(d.bio)}" placeholder="ör. kahvesiz konuşmam ☕">
         </div>
 
-        ${T.groups.map(g => `
+        ${T.groups.filter(g => g.items.length).map(g => `
           <div class="ctrl">
             <div class="row2"><span>${esc(g.label)} <small>birden çok seçebilirsin</small></span>${dice(g.id)}</div>
             <div class="presets">${g.items.map(t => preset(t, d.traits.includes(t), 'data-trait')).join('')}</div>
@@ -1951,6 +2135,7 @@
       redraw();
     };
     view.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { d.album.splice(+b.dataset.rm, 1); redraw(); });
+    view.querySelectorAll('[data-setpp]').forEach(b => b.onclick = () => { d.photo = d.album[+b.dataset.setpp]; redraw(); });
 
     view.querySelectorAll('[data-gender]').forEach(b => b.onclick = () => {
       d.gender = b.dataset.gender;

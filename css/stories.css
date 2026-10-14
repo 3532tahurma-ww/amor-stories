@@ -331,3 +331,50 @@ button.chip { border: 0; cursor: pointer; }
   display: flex; align-items: center; justify-content: center; color: #fff; font-size: 34px; font-weight: 900;
 }
 .set.on .set-ph { border-color: var(--purple); transform: scale(1.04); }
+
+/* ---------- 🖼️ Sohbette büyük fotoğraf ---------- */
+.chat-head .icon-btn.on { color: #ffd36b; }
+.hero {
+  flex: none; position: relative; height: min(40vh, 420px); margin: 0 12px 6px; border-radius: 20px; overflow: hidden;
+  cursor: pointer; background: rgba(0, 0, 0, .25); box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.hero > img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; display: block; animation: heroIn .35s ease; }
+.hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 45%; background: linear-gradient(transparent, rgba(10, 6, 25, .75)); pointer-events: none; }
+.hero-cap { position: absolute; left: 14px; right: 14px; bottom: 10px; z-index: 1; color: #fff; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; text-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
+.hero-cap b { font-size: 20px; font-weight: 900; }
+.hero-cap small { font-size: 12px; font-weight: 700; opacity: .85; }
+.hero-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-size: 72px; font-weight: 900; }
+.hero-empty small { font-size: 13px; font-weight: 700; opacity: .85; }
+.hero.group { display: flex; gap: 4px; cursor: default; background: transparent; }
+.hero-m { position: relative; flex: 1; min-width: 0; border-radius: 14px; overflow: hidden; transition: flex .35s ease, filter .35s ease; filter: brightness(.6) saturate(.8); }
+.hero-m.on { flex: 1.8; filter: none; }
+.hero-m img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; display: block; }
+.hero-m b { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 1; color: #fff; font-size: 13px; font-weight: 900; text-shadow: 0 1px 4px rgba(0, 0, 0, .7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-ini { height: 100%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 40px; font-weight: 900; }
+@keyframes heroIn { from { opacity: .3; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+
+/* Albümden profil fotoğrafı seçme */
+.al-item { position: relative; }
+.al-pp {
+  position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 4px 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: var(--text); font-size: 11.5px; font-weight: 900; text-align: center;
+}
+.al-pp.on { background: var(--purple); color: #fff; }
+.album-strip .pp { position: absolute; left: 4px; bottom: 4px; padding: 2px 7px; border-radius: 999px; background: rgba(255, 255, 255, .92); font-size: 12px; font-weight: 900; }
+.album-strip .is-pp img { box-shadow: 0 0 0 3px var(--purple); }
+.album-strip .is-pp .pp { background: var(--purple); color: #fff; }
+
+/* Büyük fotoğrafı sürükleyerek boyutlandırma */
+.hero { touch-action: none; user-select: none; -webkit-user-select: none; }
+.hero img { -webkit-user-drag: none; pointer-events: none; }
+.hero.resizing { box-shadow: 0 0 0 2px #ffd36b, 0 10px 30px rgba(0, 0, 0, .35); }
+.hero-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; z-index: 2; display: flex; align-items: center; justify-content: center; cursor: ns-resize; }
+.hero-grip i { width: 46px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .85); box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.hero.group .hero-m b { bottom: 18px; }
+.hero-cap { bottom: 20px; }
+
+/* 🤖 Bot modu göstergesi */
+.bot-on { color: #0e9f8e; font-weight: 800; }
+.bot-on button { font-weight: 900; color: var(--muted); padding: 0 4px; }
+.add-on { color: #b45309; font-weight: 800; }
+.add-on button { font-weight: 900; color: var(--muted); padding: 0 4px; }

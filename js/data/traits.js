@@ -16,6 +16,14 @@ Stories.Traits = (() => {
       id: 'style', label: '⌨️ Yazım tarzı',
       items: ['Kısa yazar', 'Uzun yazar', 'Hep küçük harf', 'Emoji sever', 'Emoji kullanmaz', 'Harf uzatır (canımmm)',
         'Noktalama kullanmaz', 'Resmi konuşur', 'Argo kullanır', 'Çok güler (sjsjsj)', 'Geç cevap verir', 'Sesli mesaj sever']
+    },
+    {
+      // Kendi özelliklerin: tırnak içinde, virgülle ayırarak ekle. Örnek:
+      //   items: ['Gece kuşu', 'Kahve bağımlısı', 'Kitap kurdu']
+      // Liste boşken Oluştur ekranında görünmez; ilk özelliği ekleyince kendi kartıyla çıkar.
+      // Başlığı değiştirmek için label'ı düzenle. Aynı şekilde yeni gruplar da ekleyebilirsin (id'leri farklı olsun).
+      id: 'extra', label: '🌟 Ekstra özellikler',
+      items: ['Vaginal','Anal','Oral Sex','Deepthroat','Cunnilingus','Paizuri','Titfuck','Footjob','Handjob','Buttjob','Blowjob','Huge Dick','Belly Bulge','Masturbation','Sex toys','Lactation','Creampie','Cumshot','Squirt','Cumflation','Female domination','Facesitting','Pregnant','Exhibitionism','Voyeurism','Iseme','Tutma' , 'Virginity','Cowgirl','Missionary','Ondesk','Anal','Doggy','Full Nelson','Public','BDSM','69']
     }
   ];
 
