@@ -738,6 +738,33 @@
    * Mesaja dokununca: tepki, cevap ver, düzenle, taraf değiştir, araya ekle, taşı, sil. 📷: fotoğraf mesajı. */
   const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 
+  /* ---------- 😊 Emoji kısayolları ve emoji efektleri (js/data/emojis.js) ----------
+   * Panel listesi S().emojiBar (yoksa varsayılan), emoji → efekt değişiklikleri S().emojiFx ('' = efektsiz) */
+  const EM = Stories.Emojis;
+  const noVs = s => String(s || '').replace(/️/g, ''); // ❤ ile ❤️ aynı sayılsın
+  const emojiBar = () => (S().emojiBar = S().emojiBar || EM.bar.slice());
+  const emojiFxMap = () => Object.assign({}, EM.effects, S().emojiFx || {});
+  const emojiFxLabel = id => (EM.list.find(x => x.id === id) || {}).label || '';
+
+  // Mesajda geçen ilk efektli emojinin efekti
+  function emojiFxOf(text) {
+    const t = noVs(text);
+    let best = null, at = Infinity;
+    Object.entries(emojiFxMap()).forEach(([e, fx]) => {
+      if (!fx) return;
+      const i = t.indexOf(noVs(e));
+      if (i !== -1 && i < at) { at = i; best = fx; }
+    });
+    return best;
+  }
+  // Emoji efektinin giriş animasyonunu baştan oynat
+  function playEmojiFx(el) {
+    if (!el || !el.classList.contains('efx')) return;
+    el.classList.remove('eplay');
+    void el.offsetWidth;
+    el.classList.add('eplay');
+  }
+
   /* ---------- Efektler ve anahtar kelimeler (js/data/effects.js) ---------- */
   const FX = Stories.Effects;
   const fxById = id => FX.bubble.concat(FX.screen).find(f => f.id === id);
@@ -1024,13 +1051,14 @@
           <input id="msgInput" type="text" enterkeyhint="send" maxlength="1000">
           <button class="send-btn" type="submit" aria-label="Gönder">${ICON.send}</button>
         </form>
+        <div class="emoji-panel" id="emojiPanel" hidden></div>
         <div class="chat-tools" id="chatTools">
           <button type="button" data-tool="theme"><span>🎨</span>Tema</button>
           <button type="button" data-tool="turns"><span>⇄</span>Sırayla</button>
           <button type="button" data-tool="photo"><span>📷</span>Fotoğraf</button>
           <button type="button" data-tool="note"><span>📝</span>Not</button>
           <button type="button" data-tool="fx"><span>✨</span>Efekt</button>
-          <button type="button" data-tool="play"><span>▶️</span>Oynat</button>
+          <button type="button" data-tool="emoji"><span>😊</span>Emoji</button>
         </div>
         <div class="play-bar" id="playBar" hidden>
           <button class="btn ghost sm" id="playSpeed">1x</button>
@@ -1193,7 +1221,11 @@
       draw(target);
       refreshList();
       if (group) drawHero();
-      if (newId) { const m = list.find(x => x.id === newId); playFx(box.querySelector(`[data-id="${newId}"]`), m && fxOf(m)); }
+      if (newId) {
+        const m = list.find(x => x.id === newId), el = box.querySelector(`[data-id="${newId}"]`);
+        playFx(el, m && fxOf(m));
+        playEmojiFx(el);
+      }
       if (botTurn) botReply(list.find(x => x.id === newId));
     }
 
@@ -1294,7 +1326,11 @@
       }
       if (t === 'photo') photoSheet();
       if (t === 'fx') fxSheet(cs.nextFx, { title: 'Sonraki mesajın efekti' }, v => { cs.nextFx = v === 'none' || v === 'auto' ? null : v; drawComposer(); input.focus(); });
-      if (t === 'play') play();
+      if (t === 'emoji') {
+        cs.emojiOpen = !cs.emojiOpen;
+        cs.emojiEdit = false;
+        drawEmoji();
+      }
     };
     $('.hcard').onclick = e => {
       const z = e.target.closest('[data-zoom]');
@@ -1427,6 +1463,72 @@
       if (k === 'z' && !(document.activeElement === input && input.value) && document.activeElement !== $('#sq')) { e.preventDefault(); undo(); }
       if (k === 'f') { e.preventDefault(); openSearch(); }
     };
+
+    /* ---------- 😊 Emoji paneli: kısayollar; efektli emojiler noktayla işaretli ---------- */
+    function drawEmoji() {
+      const el = $('#emojiPanel');
+      el.hidden = !cs.emojiOpen;
+      $('[data-tool=emoji]').classList.toggle('on', !!cs.emojiOpen);
+      if (!cs.emojiOpen) return;
+      const map = emojiFxMap(), edit = cs.emojiEdit;
+      el.innerHTML = `<div class="ep-grid">${emojiBar().map((e, i) => `<button type="button" class="ep-e${edit ? ' edit' : ''}" data-e="${i}" title="${map[e] ? 'Efekt: ' + esc(emojiFxLabel(map[e])) : ''}">${e}${map[e] ? '<i class="ep-dot"></i>' : ''}${edit ? `<b class="ep-x" data-ex="${i}">✕</b>` : ''}</button>`).join('')}
+          ${edit ? '<input class="ep-add" id="epAdd" placeholder="+ emoji yapıştır, Enter" maxlength="40">' : ''}</div>
+        <div class="ep-foot"><small>${edit ? 'Emojiye dokun: efektini seç · ✕ kaldır' : 'Noktalı emojiler baloncuğa efekt verir'}</small>
+          ${edit ? '<button type="button" id="epReset">Varsayılan</button>' : ''}
+          <button type="button" id="epEdit">${edit ? '✓ Bitti' : '✏️ Düzenle'}</button></div>`;
+    }
+
+    // Emojiye efekt seç (S().emojiFx: '' = efektsiz; kayıt silinirse varsayılana döner)
+    function emojiFxSheet(e) {
+      const cur = emojiFxMap()[e] || '';
+      const sh = sheet(`
+        <div class="sheet-grip"></div>
+        <h3>${e} için efekt</h3>
+        <div class="fx-grid">${EM.list.map(f => `<button type="button" data-ef="${f.id}" class="${cur === f.id ? 'on' : ''}"><span>${f.icon}</span>${esc(f.label)}</button>`).join('')}
+          <button type="button" data-ef="" class="${!cur ? 'on' : ''}"><span>🚫</span>Efekt yok</button></div>
+        ${EM.effects[e] !== undefined ? `<button class="btn ghost block" data-ef="default" style="margin-top:12px">Varsayılana dön (${esc(emojiFxLabel(EM.effects[e]) || 'yok')})</button>` : ''}`, 'light');
+      sh.el.onclick = ev => {
+        const b = ev.target.closest('[data-ef]');
+        if (!b) return;
+        sh.close();
+        S().emojiFx = S().emojiFx || {};
+        if (b.dataset.ef === 'default') delete S().emojiFx[e]; else S().emojiFx[e] = b.dataset.ef;
+        save();
+        drawEmoji();
+        draw();
+      };
+    }
+
+    $('#emojiPanel').addEventListener('click', e => {
+      const x = e.target.closest('[data-ex]');
+      if (x) { emojiBar().splice(+x.dataset.ex, 1); save(); drawEmoji(); return; }
+      if (e.target.closest('#epEdit')) { cs.emojiEdit = !cs.emojiEdit; drawEmoji(); if (cs.emojiEdit) $('#epAdd').focus(); return; }
+      if (e.target.closest('#epReset')) {
+        if (!confirm('Emoji listesi ve efekt seçimleri varsayılana dönsün mü?')) return;
+        S().emojiBar = EM.bar.slice(); S().emojiFx = {}; save(); drawEmoji(); draw(); return;
+      }
+      const b = e.target.closest('[data-e]');
+      if (!b) return;
+      const emo = emojiBar()[+b.dataset.e];
+      if (cs.emojiEdit) { emojiFxSheet(emo); return; }
+      // Yazma alanına imlecin olduğu yere ekle
+      const s = input.selectionStart == null ? input.value.length : input.selectionStart;
+      const en = input.selectionEnd == null ? s : input.selectionEnd;
+      input.setRangeText(emo, s, en, 'end');
+      input.focus();
+    });
+    $('#emojiPanel').addEventListener('keydown', e => {
+      if (e.key !== 'Enter' || e.target.id !== 'epAdd') return;
+      e.preventDefault();
+      const v = e.target.value.trim();
+      if (!v) return;
+      // Yapıştırılan birden çok emojiyi tek tek ayır
+      const parts = window.Intl && Intl.Segmenter ? [...new Intl.Segmenter('tr', { granularity: 'grapheme' }).segment(v)].map(x => x.segment) : [v];
+      parts.filter(p => p.trim() && !emojiBar().includes(p)).forEach(p => emojiBar().push(p));
+      save();
+      drawEmoji();
+      $('#epAdd').focus();
+    });
 
     // 📷 Fotoğraf: cihazdan ya da albümlerden. Yazma alanındaki metin açıklama olur.
     function photoSheet() {
@@ -1760,6 +1862,7 @@
       drawUndo();
       let i = 0, speed = 1, typingEl = null;
       const dock = ['#composer', '#chatTools', '#sideHint', '#spkRow'].map(s => $(s)).filter(Boolean);
+      $('#emojiPanel').hidden = true;
       dock.forEach(el => { el.hidden = true; });
       $('#playBar').hidden = false;
       $('#playSpeed').textContent = '1x';
@@ -1771,6 +1874,7 @@
         box.insertAdjacentHTML('beforeend', itemHtml(ctx, all[i], all[i - 1]));
         if (group && all[i].from === 'her') drawHero(all[i].who);
         playFx(box.querySelector(`[data-id="${all[i].id}"]`), fxOf(all[i]));
+        playEmojiFx(box.querySelector(`[data-id="${all[i].id}"]`));
         i++;
         setStatus(`${i} / ${all.length}`);
         box.scrollTop = box.scrollHeight;
@@ -1792,6 +1896,7 @@
         clearTimeout(playTimer);
         cs.playing = false;
         dock.forEach(el => { el.hidden = false; });
+        $('#emojiPanel').hidden = !cs.emojiOpen;
         $('#playBar').hidden = true;
         drawComposer();
         draw();
@@ -1848,7 +1953,8 @@
     const fx = effectOf(m, ctx.sid(m));
     const fxTag = fx && isScreenFx(fx) ? `<button type="button" class="fx-tag" aria-label="Efekti oynat">${fxById(fx).icon}</button>` : '';
     const bubble = `<div class="bubble${m.type === 'photo' ? ' photo' : ''}${quote ? ' has-quote' : ''}">${quote}${body}${react}${fxTag}</div>`;
-    const cls = `${m.react ? ' reacted' : ''}${ctx.query && (m.text || '').toLocaleLowerCase('tr').includes(ctx.query) ? ' hit' : ''}${fx && !isScreenFx(fx) ? ` fx fx-${fx}` : ''}`;
+    const efx = m.effect === 'none' ? null : emojiFxOf(m.text);
+    const cls = `${m.react ? ' reacted' : ''}${ctx.query && (m.text || '').toLocaleLowerCase('tr').includes(ctx.query) ? ' hit' : ''}${fx && !isScreenFx(fx) ? ` fx fx-${fx}` : ''}${efx ? ` efx efx-${efx}` : ''}`;
     if (m.from === 'her') {
       const ch = ctx.speaker(m);
       if (!ctx.group) return html + `<div class="msg her ${cont ? 'cont' : ''}${cls}" data-id="${m.id}">${avatar(ch, 36)}${bubble}</div>`;
