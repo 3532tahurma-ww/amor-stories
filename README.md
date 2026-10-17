@@ -15,7 +15,8 @@ css/style.css       Amor'un tasarımı (Amor'dan aynen kopyalandı)
 css/stories.css     Amor Stories'e özel eklemeler
 js/store.js         localStorage ile kalıcı veri
 js/data/traits.js   hazır kişilik / yazım tarzı özellikleri, burçlar, renkler
-js/data/pools.js    🎲 için isim, şehir, meslek, durum havuzları
+js/data/pools.js    🎲 için havuzlar (Amor havuzunu kullanır, erkek isimleri ve durumlar burada)
+js/data/amor-pools.js  Amor'un isim/şehir/meslek/isim süsü havuzu (Amor/js/data/pools.js kopyası)
 js/data/photos.js   fotoğraf setleri listesi (otomatik üretilir)
 js/data/mods.js     karakter modları (Amor, Don't Stop)
 js/data/themes.js   sohbet arka planları ve baloncuk stilleri
@@ -43,7 +44,8 @@ Görseller `mods/<mod>/` altında, mod tanımları `js/data/mods.js` içinde. Ye
 Sohbette **🎨 Tema**:
 
 - **Arka plan:** 8 renk/degrade, karakterin albümündeki fotoğraflar ya da cihazdan yüklenen bir fotoğraf.
-- **Baloncuklar:** Amor, iMessage, WhatsApp, Instagram, Karakter rengi, Pastel, Siyah beyaz, Neon, Retro, Cam, Bulut, Çizgi roman, Terminal, Not kâğıdı, Altın.
+- **Hazır temalar:** 💖 Kalp teması (uçan kalpler + kalp mücevheri baloncuk, Amor'daki Lv.4) ve 💎 Mücevher kalp (Lv.5).
+- **Baloncuklar:** Amor, iMessage, WhatsApp, Instagram, Karakter rengi, Pastel, Siyah beyaz, Neon, Retro, Cam, Bulut, Çizgi roman, Terminal, Not kâğıdı, Altın; Amor'dan: Kalp mücevheri, Pamuk şeker, Altın ışıltı, Gece neonu, Galaksi. Arka planlarda Amor'un Uçan kalpler, Mücevher kalp, Pembe rüya ve Galaksi temaları da var.
 - **Grupta üye renkleri:** her üyenin baloncuğuna ayrı renk verilebilir (stilden bağımsız; "–" stile döner).
 
 Tema her sohbete ayrı kaydedilir; "yeni sohbetlerde de kullan" işaretliyse karakterin varsayılanı olur. Yeni temalar `js/data/themes.js` içine eklenir.

@@ -959,11 +959,18 @@
   }
 
   function themeCss(t, c) {
+    const def = TH.backgrounds.find(b => b.id === t.bg) || TH.backgrounds[0];
     const bg = t.bg === 'img' && t.img
       // en altta Amor degradesi: şeffaf (PNG) fotoğrafların arkası boş kalmasın
       ? `linear-gradient(rgba(14, 8, 30, .45), rgba(14, 8, 30, .8)), url("${t.img}") center / cover no-repeat, ${TH.backgrounds[0].css}`
-      : (TH.backgrounds.find(b => b.id === t.bg) || TH.backgrounds[0]).css;
-    return `background:${bg};` + bubbleVars(TH.bubbles.find(b => b.id === t.bubble) || TH.bubbles[0], c);
+      : def.css;
+    // Sınıfla tanımlı arka planlar (Amor'un .bg-ucan-kalpler gibi) için satır içi arka plan yazılmaz
+    return (bg ? `background:${bg};` : '') + bubbleVars(TH.bubbles.find(b => b.id === t.bubble) || TH.bubbles[0], c);
+  }
+  // .chat üzerindeki tema sınıfları (arka plan .bg-*, baloncuk süsü .sbub-*)
+  function themeClasses(el, t) {
+    TH.backgrounds.forEach(b => { if (b.cls) el.classList.toggle(b.cls, t.bg === b.id); });
+    TH.bubbles.forEach(b => { if (b.cls) el.classList.toggle(b.cls, t.bubble === b.id); });
   }
 
   function renderChat(c, th) {
@@ -1568,9 +1575,11 @@
       const sh = sheet(`
         <div class="sheet-grip"></div>
         <h3>🎨 Sohbet teması</h3>
-        <div class="sec-title" style="margin-top:0">Arka plan</div>
+        ${(TH.presets || []).length ? `<div class="sec-title" style="margin-top:0">Hazır temalar</div>
+        <div class="preset-row">${TH.presets.map(p => `<button type="button" data-preset="${p.id}" class="${p.bg ? (TH.backgrounds.find(b => b.id === p.bg) || {}).cls || '' : ''}${t0.bg === p.bg && t0.bubble === p.bubble ? ' on' : ''}" title="${esc(p.note || '')}"><b>${p.icon} ${esc(p.label)}</b></button>`).join('')}</div>` : ''}
+        <div class="sec-title"${(TH.presets || []).length ? '' : ' style="margin-top:0"'}>Arka plan</div>
         <div class="bg-grid">
-          ${TH.backgrounds.map(b => `<button type="button" data-bg="${b.id}" class="${t0.bg === b.id ? 'on' : ''}" style="background:${b.css}"><span>${esc(b.label)}</span></button>`).join('')}
+          ${TH.backgrounds.map(b => `<button type="button" data-bg="${b.id}" class="${b.cls || ''}${t0.bg === b.id ? ' on' : ''}"${b.css ? ` style="background:${b.css}"` : ''}><span>${esc(b.label)}</span></button>`).join('')}
           ${imgs.map((src, i) => `<button type="button" data-img="${i}" class="${t0.bg === 'img' && t0.img === src ? 'on' : ''}" style="background:url('${esc(src)}') center / cover no-repeat, ${TH.backgrounds[0].css}"><span>📷</span></button>`).join('')}
           <label class="up">➕<span>Fotoğraf yükle</span><input type="file" accept="image/*" id="bgFile" hidden></label>
         </div>
@@ -1607,10 +1616,18 @@
         el.querySelectorAll('[data-bg], [data-img]').forEach(b => b.classList.toggle('on',
           b.dataset.bg ? th.theme.bg === b.dataset.bg : th.theme.bg === 'img' && th.theme.img === imgs[+b.dataset.img]));
         el.querySelectorAll('[data-bub]').forEach(b => b.classList.toggle('on', th.theme.bubble === b.dataset.bub));
+        el.querySelectorAll('[data-preset]').forEach(b => {
+          const p = TH.presets.find(x => x.id === b.dataset.preset);
+          b.classList.toggle('on', th.theme.bg === p.bg && th.theme.bubble === p.bubble);
+        });
       };
       el.querySelectorAll('[data-bg]').forEach(b => b.onclick = () => set({ bg: b.dataset.bg }));
       el.querySelectorAll('[data-img]').forEach(b => b.onclick = () => set({ bg: 'img', img: imgs[+b.dataset.img] }));
       el.querySelectorAll('[data-bub]').forEach(b => b.onclick = () => set({ bubble: b.dataset.bub }));
+      el.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+        const p = TH.presets.find(x => x.id === b.dataset.preset);
+        set({ bg: p.bg, bubble: p.bubble });
+      });
       el.querySelector('#bgFile').onchange = async e => {
         const f = e.target.files[0];
         if (!f) return;
@@ -1624,6 +1641,7 @@
       if (!el) return;
       const t = themeOf(th, look);
       el.style.cssText = themeCss(t, look);
+      themeClasses(el, t);
       // grupta "Karakter rengi": her üyenin baloncuğu kendi renginde
       el.classList.toggle('sbub-char', group && t.bubble === 'char');
     }
@@ -2033,6 +2051,43 @@
     return (m.characters || []).map(p => ({ id: `${m.id}:${p.key}`, name: p.name, thumb: p.photo || p.album[0], colors: p.colors, apply: d => applyPreset(d, m, p) }));
   }
 
+  /* İsim havuzu (js/data/pools.js ← Amor'un havuzu): ismin dönemi yaşı, yaş mesleği belirler */
+  const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+  const eraOf = name => Object.keys(P.eras || {}).find(k => P.eras[k].includes(name));
+  function randName(gender) {
+    if (gender === '♀' && P.eras) return pick(P.eras[pick(Object.keys(P.eras))]); // önce dönem, sonra isim (dönemler eşit gelsin)
+    return pick(P.names[gender] || P.names['♀']);
+  }
+  function randAge(name) {
+    const r = P.eraAge[eraOf(name)] || P.age;
+    return String(randInt(r[0], r[1]));
+  }
+  function randJob(age) {
+    if (!P.jobObjs.length) return pick(P.jobs);
+    const a = +age || 25;
+    const ok = P.jobObjs.filter(j => (!j.min || a >= j.min) && (!j.max || a <= j.max));
+    return pick(ok.length ? ok : P.jobObjs).title;
+  }
+  // 🎀 Süslü isim (Amor'un ekran adları gibi): BÜYÜK, küçük, uzatma, parantez, takma ad + emoji/sembol süsü
+  function fancyName(base) {
+    const up = s => s.toLocaleUpperCase('tr'), low = s => s.toLocaleLowerCase('tr');
+    const total = P.styles.reduce((a, s) => a + s[1], 0);
+    let r = Math.random() * total;
+    const style = (P.styles.find(s => (r -= s[1]) < 0) || [''])[0];
+    let n = base;
+    if (style === 'upper') n = up(base);
+    else if (style === 'lower') n = low(base);
+    else if (style === 'stretch') n = base + base.slice(-1).repeat(randInt(1, 2));
+    else if (style === 'paren') { const b = pick(P.brackets); n = b[0] + up(base) + b[1]; }
+    else if (style === 'az') n = base.replace(/e/g, 'ə') + base.slice(-1);
+    else if (style === 'nick' && P.nicknames.length) n = pick(P.nicknames).replace(/\{name\}/g, base).replace(/\{low\}/g, low(base).replace(/\s+/g, ''));
+    if (P.decos.length && (n === base || Math.random() < 0.5)) {
+      const [a, b, tight] = pick(P.decos);
+      n = tight ? a + n + b : [a, n, b].filter(Boolean).join(' ');
+    }
+    return n;
+  }
+
   // 🎲: tek alanı ya da ('all') hepsini rastgele belirler
   function randomize(d, k) {
     const mod = ui.createMod || 'amor';
@@ -2053,11 +2108,12 @@
         applySet(d, pick(free.length ? free : SETS));
       }
       if (k === 'set') return;
-      if (!SETS.length) d.name = pick(P.names[d.gender]);
+      // Amor gibi: fotoğraf seti + isim havuzundan isim
+      d.name = randName(d.gender);
     }
-    if (k === 'name') d.name = pick(P.names[d.gender]);
-    if (k === 'all' || k === 'age') d.age = String(P.age[0] + Math.floor(Math.random() * (P.age[1] - P.age[0] + 1)));
-    if (k === 'all' || k === 'place') { d.city = pick(P.cities); d.job = pick(P.jobs); }
+    if (k === 'name') d.name = randName(d.gender);
+    if (k === 'all' || k === 'age') d.age = randAge(d.name);
+    if (k === 'all' || k === 'place') { d.city = pick(P.cities); d.job = randJob(d.age); }
     if (k === 'all' || k === 'zodiac') d.zodiac = pick(T.zodiacs);
     if (k === 'all' || k === 'bio') d.bio = pick(P.bios);
     T.groups.forEach(g => {
@@ -2132,8 +2188,8 @@
         </div>
 
         <div class="ctrl">
-          <div class="row2"><span>✍️ İsim</span>${dice('name')}</div>
-          <input type="text" id="cName" maxlength="24" value="${esc(d.name)}" placeholder="ör. Elif">
+          <div class="row2"><span>✍️ İsim</span><span class="dice-pair"><button type="button" class="dice-btn" id="fancyBtn" title="Süslü isim (✨Elif✨, ELİF, Eliff, ((ELİF)), Küçük Elif…)">🎀</button>${dice('name')}</span></div>
+          <input type="text" id="cName" maxlength="40" value="${esc(d.name)}" placeholder="ör. Elif">
         </div>
 
         <div class="ctrl">
@@ -2222,6 +2278,15 @@
     const pv = () => { $('#pv').innerHTML = previewHtml(d); };
     const bindText = (sel, k, fn) => { const el = $(sel); el.oninput = () => { d[k] = fn ? fn(el) : el.value; }; el.onchange = pv; };
     bindText('#cName', 'name');
+    // 🎀 her basışta aynı sade isimden yeni bir süslü hâl (isim elle değiştiyse yeni hâli esas alınır)
+    $('#fancyBtn').onclick = () => {
+      const st = ui.create;
+      const base = st.fancy === d.name && st.base ? st.base : d.name.trim();
+      if (!base) { notify('Önce bir isim yaz ya da 🎲 ile seç', '🎀'); return; }
+      st.base = base;
+      st.fancy = d.name = fancyName(base);
+      redraw();
+    };
     bindText('#cAge', 'age', el => (el.value = el.value.replace(/\D/g, '')));
     bindText('#cCity', 'city');
     bindText('#cJob', 'job');

@@ -16,7 +16,12 @@ Stories.Themes = {
     { id: 'sunset', label: 'Gün batımı', css: 'linear-gradient(180deg, #7a2e4f 0%, #4a1f45 45%, #1c1030 100%)' },
     { id: 'night', label: 'Gece mavisi', css: 'radial-gradient(circle at 30% 10%, #2a3a7a 0%, #141a3c 45%, #070914 100%)' },
     { id: 'coffee', label: 'Kahve', css: 'linear-gradient(180deg, #4a3226 0%, #2c1d16 55%, #160e0a 100%)' },
-    { id: 'dark', label: 'Karanlık', css: '#111116' }
+    { id: 'dark', label: 'Karanlık', css: '#111116' },
+    // Amor'un mağaza / kalp düzeyi arka planları (cls: görünüm css/style.css'teki .bg-<id> sınıfından gelir)
+    { id: 'ucan-kalpler', label: 'Uçan kalpler', cls: 'bg-ucan-kalpler' },
+    { id: 'kalp-kolye', label: 'Mücevher kalp', cls: 'bg-kalp-kolye' },
+    { id: 'pembe-ruya', label: 'Pembe rüya', cls: 'bg-pembe-ruya' },
+    { id: 'galaksi', label: 'Galaksi', css: 'radial-gradient(circle at 30% 20%, #4c1d95 0%, #1e1b4b 40%, #0b0820 100%)' }
   ],
   bubbles: [
     { id: 'amor', label: 'Amor', me: '#ff3d8b', her: '#2c2442' },
@@ -33,7 +38,18 @@ Stories.Themes = {
     { id: 'comic', label: 'Çizgi roman', me: '#fff6c9', meFg: '#111111', meBorder: '3px solid #111', her: '#ffffff', herFg: '#111111', herBorder: '3px solid #111', radius: '18px', tail: '3px', font: "'Comic Sans MS', 'Comic Neue', cursive", shadow: '4px 4px 0 #111' },
     { id: 'terminal', label: 'Terminal', me: '#0b1a0b', meFg: '#39ff7a', meBorder: '1px solid #39ff7a', her: '#0d0d0d', herFg: '#e6e6e6', herBorder: '1px solid #555', radius: '2px', tail: '2px', font: "Consolas, 'Courier New', monospace" },
     { id: 'paper', label: 'Not kâğıdı', me: '#fff59d', meFg: '#3e2f00', her: '#fdfdf6', herFg: '#333333', radius: '3px', tail: '3px', font: "'Segoe Print', 'Bradley Hand', cursive", shadow: '2px 3px 8px rgba(0, 0, 0, .35)' },
-    { id: 'gold', label: 'Altın', me: 'linear-gradient(135deg, #f9e29c, #d4a437 55%, #b8862b)', meFg: '#2b1d00', her: 'linear-gradient(135deg, #2b2b2b, #141414)', herFg: '#f3d27a', herBorder: '1px solid #b8862b', radius: '14px', shadow: '0 3px 12px rgba(212, 164, 55, .3)' }
+    { id: 'gold', label: 'Altın', me: 'linear-gradient(135deg, #f9e29c, #d4a437 55%, #b8862b)', meFg: '#2b1d00', her: 'linear-gradient(135deg, #2b2b2b, #141414)', herFg: '#f3d27a', herBorder: '1px solid #b8862b', radius: '14px', shadow: '0 3px 12px rgba(212, 164, 55, .3)' },
+    // Amor'un baloncukları. cls: ek süs (kalp mücevheri) css/stories.css'te .sbub-<ad>
+    { id: 'kalp', label: 'Kalp mücevheri', cls: 'sbub-kalp', me: 'linear-gradient(100deg, #ff7a6b 0%, #ff4fa0 45%, #f83cb0 100%)', her: 'linear-gradient(160deg, #f45fc8 0%, #ff8fb5 60%, #ffb38a 100%)', herFg: '#4a0f2e', meBorder: '1.5px solid rgba(255,255,255,.55)', herBorder: '1.5px solid rgba(255,255,255,.55)', shadow: '0 4px 14px rgba(255,60,150,.35), inset 0 1px 0 rgba(255,255,255,.5)' },
+    { id: 'seker', label: 'Pamuk şeker', me: 'linear-gradient(135deg, #ffb3d9, #b8c6ff)', meFg: '#4a2a5a', her: 'linear-gradient(135deg, #d7f3ff, #ffe0f0)', herFg: '#4a2a5a', meBorder: '1.5px solid rgba(255,255,255,.7)', herBorder: '1.5px solid rgba(255,255,255,.7)' },
+    { id: 'altin-isilti', label: 'Altın ışıltı', me: 'linear-gradient(135deg, #fde68a, #f59e0b 55%, #fbbf24)', meFg: '#4a2c00', her: '#2c2442', herBorder: '1.5px solid #f8d34a', shadow: '0 4px 14px rgba(245,158,11,.35)' },
+    { id: 'gece-neonu', label: 'Gece neonu', me: 'rgba(40,5,30,.7)', meBorder: '2px solid #ec4899', her: 'rgba(15,10,35,.75)', herBorder: '2px solid #22d3ee', shadow: '0 0 12px rgba(236,72,153,.6)' },
+    { id: 'galaksi', label: 'Galaksi', me: 'radial-gradient(circle at 15% 25%, rgba(255,255,255,.8) 0 1px, transparent 2px), radial-gradient(circle at 72% 60%, rgba(255,255,255,.7) 0 1px, transparent 2px), radial-gradient(circle at 45% 82%, rgba(255,255,255,.6) 0 1px, transparent 2px), linear-gradient(135deg, #6d28d9, #db2777)', her: 'radial-gradient(circle at 15% 25%, rgba(255,255,255,.8) 0 1px, transparent 2px), radial-gradient(circle at 72% 60%, rgba(255,255,255,.7) 0 1px, transparent 2px), radial-gradient(circle at 45% 82%, rgba(255,255,255,.6) 0 1px, transparent 2px), linear-gradient(135deg, #1e1b4b, #4c1d95)' }
+  ],
+  // Hazır temalar: arka plan + baloncuk birlikte (Amor'daki kalp düzeyi temaları)
+  presets: [
+    { id: 'kalp', label: 'Kalp teması', icon: '💖', bg: 'ucan-kalpler', bubble: 'kalp', note: 'Amor Lv.4: uçan kalpler + kalpli baloncuklar' },
+    { id: 'mucevher', label: 'Mücevher kalp', icon: '💎', bg: 'kalp-kolye', bubble: 'kalp', note: 'Amor Lv.5: mücevher kalp + kalpli baloncuklar' }
   ],
   // Grupta üyelere tek tek verilebilen baloncuk renkleri
   memberColors: [

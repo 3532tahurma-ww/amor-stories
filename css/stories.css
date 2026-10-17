@@ -457,3 +457,21 @@ button.chip { border: 0; cursor: pointer; }
 @keyframes efxWave { 0%, 100% { transform: skewX(0) rotate(0); } 25% { transform: skewX(-4deg) rotate(-1deg); } 75% { transform: skewX(4deg) rotate(1deg); } }
 
 @media (prefers-reduced-motion: reduce) { .msg.efx .bubble, .msg.efx .bubble::before, .msg.efx .bubble::after { animation: none !important; } }
+.dice-pair { display: inline-flex; gap: 6px; }
+
+/* ---------- Amor temaları: hazır tema düğmeleri ve kalp mücevheri baloncuğu ---------- */
+.preset-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.preset-row button { height: 64px; border-radius: 14px; color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,.6); border: 3px solid transparent; background-size: cover; background-position: center; }
+.preset-row button.on { border-color: var(--purple); box-shadow: 0 0 0 2px #fff inset; }
+.bg-grid > .bg-ucan-kalpler, .bg-grid > .bg-kalp-kolye, .bg-grid > .bg-pembe-ruya { background-size: auto; }
+.preset-row .bg-ucan-kalpler { background-size: auto; }
+
+/* Kalp mücevheri: Amor'daki gibi baloncuğun köşesinde mücevher kalp (emoji efekti olan baloncukta gizlenir) */
+.chat.sbub-kalp .msg .bubble { margin-bottom: 6px; }
+.chat.sbub-kalp .msg:not(.efx) .bubble::after {
+  content: ''; position: absolute; bottom: -11px; width: 26px; height: 24px; pointer-events: none;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 30'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23ffd0ec'/><stop offset='.5' stop-color='%23ff3d9a'/><stop offset='1' stop-color='%23b0125f'/></linearGradient></defs><path d='M16 28C6 20 1 15 1 9a7.5 7.5 0 0 1 15-2 7.5 7.5 0 0 1 15 2c0 6-5 11-15 19z' fill='url(%23g)' stroke='%23ffe7a3' stroke-width='1.6'/><path d='M7 6c2-1.5 4-1 5 1' stroke='%23fff' stroke-width='2' fill='none' stroke-linecap='round' opacity='.85'/><path d='M16 10l-5 5 5 8 5-8z' fill='%23fff' opacity='.35'/></svg>") center / contain no-repeat;
+  filter: drop-shadow(0 2px 4px rgba(120,0,60,.5));
+}
+.chat.sbub-kalp .msg.me:not(.efx) .bubble::after { left: -10px; }
+.chat.sbub-kalp .msg.her:not(.efx) .bubble::after { right: -10px; }
