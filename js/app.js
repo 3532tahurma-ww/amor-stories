@@ -949,6 +949,7 @@
 
   /* Sohbet teması (js/data/themes.js): sohbetin kendi teması > karakterin varsayılanı > Amor */
   const TH = Stories.Themes;
+  const PLACES = Stories.PLACES || [], PLACE_GROUPS = Stories.PLACE_GROUPS || [];
   const themeOf = (th, c) => Object.assign({ bg: 'amor', bubble: 'amor' }, c.theme || {}, th.theme || {});
 
   function bubbleVars(b, c) {
@@ -1064,6 +1065,7 @@
           <button type="button" data-tool="turns"><span>⇄</span>Sırayla</button>
           <button type="button" data-tool="photo"><span>📷</span>Fotoğraf</button>
           <button type="button" data-tool="note"><span>📝</span>Not</button>
+          <button type="button" data-tool="place"><span>📍</span>Mekan</button>
           <button type="button" data-tool="fx"><span>✨</span>Efekt</button>
           <button type="button" data-tool="emoji"><span>😊</span>Emoji</button>
         </div>
@@ -1234,6 +1236,7 @@
         playEmojiFx(el);
       }
       if (botTurn) botReply(list.find(x => x.id === newId));
+      else if (newId && !target) autoScene();
     }
 
     /* ---------- 🪄 Otomatik ekler: karakterin mesajında kelime/fiil geçerse sonuna ek ya da ayrı mesaj ----------
@@ -1275,7 +1278,7 @@
       const { ch, m } = win[Math.floor(Math.random() * win.length)];
       const parts = BOT.reply(m.rule, { sen: userName(), ben: ch.name.split(' ')[0] });
       const step = i => {
-        if (i >= parts.length) { drawComposer(); return; }
+        if (i >= parts.length) { drawComposer(); autoScene(); return; }
         box.insertAdjacentHTML('beforeend', `<div class="msg her" id="botTyping">${avatar(ch, 36)}<div class="bubble"><span class="typing-dots"><i></i><i></i><i></i></span></div></div>`);
         box.scrollTop = box.scrollHeight;
         setStatus(group ? `${ch.name} yazıyor…` : 'yazıyor…', 'typing');
@@ -1296,6 +1299,99 @@
         }, Math.min(2600, 700 + parts[i].length * 35));
       };
       botTimer = setTimeout(() => step(0), 500);
+    }
+
+    /* ---------- 📍 Mekan ve ipuçları (js/data/places.js): başta bir mekan kartı, sonra her HINT_EVERY mesajda bir ipucu ----------
+     * Kart bir nottur (from: 'sys') + scene: { place, icon, name, kind: 'hint' = aynı yerde sıradaki an } */
+    const HINT_EVERY = 8;
+    const herFirst = () => (group ? members()[Math.floor(Math.random() * members().length)] || GHOST : c).name.split(' ')[0];
+    const fillHint = s => String(s || '').replace(/\{o\}/g, herFirst());
+    const inHours = (hr, h) => !hr || (hr[0] <= hr[1] ? h >= hr[0] && h < hr[1] : h >= hr[0] || h < hr[1]);
+    const pickOf = a => a[Math.floor(Math.random() * a.length)];
+    function pickPlace(exclude) {
+      const h = new Date().getHours();
+      let pool = PLACES.filter(p => inHours(p.hours, h) && p.id !== exclude);
+      if (!pool.length) pool = PLACES;
+      const p = pickOf(pool);
+      return { place: p.id, icon: p.icon, name: p.name, hint: pickOf(p.hints) };
+    }
+    // Hikaye ilerler: aynı yerin sıradaki ipucu, bitince birkaç küçük an, sonra başka bir yer
+    function nextScene() {
+      let i = list.length - 1;
+      while (i >= 0 && !list[i].scene) i--;
+      const last = list[i];
+      if (!last) return pickPlace();
+      // buraya gelindiği kart (ipucu olmayan son mekan kartı) ve sonrası
+      let j = i;
+      while (j > 0 && !(list[j].scene && !list[j].scene.kind)) j--;
+      const here = list.slice(j).filter(m => m.scene), used = new Set(here.map(m => m.scene.hint));
+      const p = PLACES.find(x => x.id === last.scene.place), sc = last.scene;
+      const left = p ? p.hints.filter(h => !used.has(h)) : [];
+      if (left.length) return { ...sc, hint: pickOf(left), kind: 'hint' };
+      const moments = (Stories.MOMENTS || []).filter(h => !used.has(h));
+      if ((!p || p.moments !== false) && here.length < (p ? p.hints.length : 1) + 3 && moments.length) return { ...sc, hint: pickOf(moments), kind: 'hint' };
+      return pickPlace(sc.place);
+    }
+    function sceneMsg(sc) {
+      const { hint, ...rest } = sc;
+      if (!rest.kind) delete rest.kind;
+      return { id: Store.uid(), from: 'sys', text: fillHint(hint), scene: { ...rest, hint }, ts: Math.max(Date.now(), ((list[list.length - 1] || {}).ts || 0) + 1) };
+    }
+    function addScene(sc, label) {
+      if (label) snap(label);
+      list.push(sceneMsg(sc));
+      save(); draw(); refreshList();
+    }
+    function autoScene() {
+      if (cs.playing || !PLACES.length) return;
+      let i = list.length - 1;
+      while (i >= 0 && !list[i].scene) i--;
+      if (i >= 0 && list.slice(i + 1).filter(m => m.from !== 'sys').length < HINT_EVERY) return;
+      addScene(nextScene());
+    }
+    // m: değiştirilecek kart; yoksa sona yeni bir mekan kartı (hikaye başka yere geçer)
+    function placeSheet(m) {
+      const cur = m ? { ...m.scene, hint: m.text } : (() => { const p = pickPlace(); return { ...p, hint: fillHint(p.hint) }; })();
+      const origPlace = cur.place;
+      const sh = sheet(`
+        <div class="sheet-grip"></div>
+        <h3>📍 ${m ? 'Mekanı değiştir' : 'Yeni mekan'}</h3>
+        ${PLACE_GROUPS.map(g => `<div class="sec-title">${g.icon} ${esc(g.name)}</div>
+          <div class="pl-grid">${PLACES.filter(p => p.group === g.id).map(p => `<button type="button" data-pl="${p.id}" class="${p.id === cur.place ? 'on' : ''}"><span>${p.icon}</span><small>${esc(p.name)}</small></button>`).join('')}</div>`).join('')}
+        <div class="sec-title">Kendi mekanın (isteğe bağlı)</div>
+        <div class="pl-own"><input id="plIcon" maxlength="4" placeholder="📍"><input id="plName" maxlength="40" placeholder="ör. Büyükannesinin bahçesinde"></div>
+        <div class="sec-title">İpucu <button type="button" class="pl-roll" id="plRoll" aria-label="Başka bir ipucu">🎲</button></div>
+        <textarea id="plHint" rows="3" maxlength="300" placeholder="Şuradasınız, şunu yapıyorsunuz…">${esc(cur.hint || '')}</textarea>
+        <button type="button" class="btn pink block" id="plSave">${m ? 'Kaydet' : 'Mekanı ekle'}</button>`, 'light');
+      const hintEl = sh.el.querySelector('#plHint');
+      const roll = () => {
+        const p = PLACES.find(x => x.id === cur.place);
+        if (!p) return;
+        const left = p.hints.map(fillHint).filter(h => h !== hintEl.value);
+        hintEl.value = pickOf(left.length ? left : p.hints.map(fillHint));
+      };
+      sh.el.onclick = e => {
+        const b = e.target.closest('[data-pl]');
+        if (b) {
+          const p = PLACES.find(x => x.id === b.dataset.pl);
+          Object.assign(cur, { place: p.id, icon: p.icon, name: p.name });
+          sh.el.querySelectorAll('[data-pl]').forEach(x => x.classList.toggle('on', x === b));
+          roll();
+          return;
+        }
+        if (e.target.closest('#plRoll')) { roll(); return; }
+        if (!e.target.closest('#plSave')) return;
+        const own = sh.el.querySelector('#plName').value.trim(), ownIcon = sh.el.querySelector('#plIcon').value.trim();
+        const sc = { place: own ? '' : cur.place, icon: ownIcon || (own ? '📍' : cur.icon), name: own || cur.name, hint: hintEl.value.trim() };
+        sh.close();
+        if (m) {
+          snap('Mekan değişti');
+          m.text = sc.hint;
+          m.scene = { place: sc.place, icon: sc.icon, name: sc.name, hint: sc.hint };
+          if (cur.kind && !own && sc.place === origPlace) m.scene.kind = cur.kind;
+          save(); draw(m.id); refreshList();
+        } else addScene(sc, 'Mekan eklendi');
+      };
     }
 
     $('#composer').onsubmit = e => {
@@ -1332,6 +1428,7 @@
         input.focus();
       }
       if (t === 'photo') photoSheet();
+      if (t === 'place') placeSheet(null);
       if (t === 'fx') fxSheet(cs.nextFx, { title: 'Sonraki mesajın efekti' }, v => { cs.nextFx = v === 'none' || v === 'auto' ? null : v; drawComposer(); input.focus(); });
       if (t === 'emoji') {
         cs.emojiOpen = !cs.emojiOpen;
@@ -1716,7 +1813,8 @@
         ${photo ? '<button class="act" data-act="zoom">🔍 Fotoğrafı büyüt</button>' : ''}
         ${m.from !== 'sys' ? `<button class="act" data-act="fx">✨ Efekt${fxDef ? `: ${fxDef.icon} ${esc(fxDef.label)}${m.effect ? '' : ' <small>(anahtar kelime)</small>'}` : ''}</button>` : ''}
         ${fxDef ? '<button class="act" data-act="fxplay">▶️ Efekti oynat</button>' : ''}
-        <button class="act" data-act="edit">✏️ ${photo ? 'Açıklamayı düzenle' : 'Düzenle'}</button>
+        ${m.scene ? '<button class="act" data-act="sc-pick">📍 Mekanı değiştir</button><button class="act" data-act="sc-roll">🎲 Başka bir yer</button>' : ''}
+        <button class="act" data-act="edit">✏️ ${photo ? 'Açıklamayı düzenle' : m.scene ? 'İpucunu düzenle' : 'Düzenle'}</button>
         ${m.from !== 'sys' ? `<button class="act" data-act="flip">${flipLabel}</button>` : ''}
         <button class="act" data-act="insert">➕ Üstüne mesaj ekle</button>
         ${i > 0 ? '<button class="act" data-act="up">⬆️ Yukarı taşı</button>' : ''}
@@ -1737,6 +1835,12 @@
         sh.close();
         const a = b.dataset.act;
         if (a === 'zoom') { lightbox([m.src]); return; }
+        if (a === 'sc-pick') { placeSheet(m); return; }
+        if (a === 'sc-roll') {
+          snap('Mekan değişti');
+          const n = sceneMsg(pickPlace(m.scene.place));
+          m.text = n.text; m.scene = n.scene;
+        }
         if (a === 'fxplay') { playFx(box.querySelector(`[data-id="${m.id}"]`), fxNow); return; }
         if (a === 'fx') {
           fxSheet(m.effect || null, { title: 'Mesaj efekti', auto: true }, v => {
@@ -1929,6 +2033,7 @@
 
     applyTheme();
     drawHero();
+    autoScene();
     drawComposer();
     draw();
     drawUndo();
@@ -1957,6 +2062,13 @@
     const txt = s => highlight(s || '', ctx.query);
     let html = '';
     if (!prev || m.ts - prev.ts > 10 * 60 * 1000) html += `<div class="stamp">${fmtTime(m.ts)}</div>`;
+    if (m.from === 'sys' && m.scene) {
+      // 📍 mekan kartı; kind 'hint' = aynı yerde sıradaki an (küçük kart)
+      const sc = m.scene, p = PLACES.find(x => x.id === sc.place) || {}, hint = sc.kind === 'hint';
+      return html + `<div class="scene-card g-${esc(p.group || 'yol')}${hint ? ' sc-hint' : ''}" data-id="${m.id}">
+        <div class="sc-ic">${hint ? '💡' : esc(sc.icon || '📍')}</div>
+        <div class="sc-body"><small>${hint ? `İpucu · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : '📍 Mekan'}</small>${hint ? '' : `<b>${esc(sc.name || 'Bir yerde')}</b>`}<span>${txt(m.text)}</span></div></div>`;
+    }
     if (m.from === 'sys') return html + `<div class="sys" data-id="${m.id}">${txt(m.text)}</div>`;
 
     const cont = prev && prev.from === m.from && (prev.who || '') === (m.who || '') && !html;
