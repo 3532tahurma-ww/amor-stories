@@ -581,3 +581,16 @@ button.chip { border: 0; cursor: pointer; }
 .st-body small { color: var(--muted); font-size: 12.5px; }
 .st-acts { display: flex; gap: 6px; margin-top: 4px; }
 .st-acts .btn { padding: 0 12px; }
+/* ---------- 🖼️ Lara Gallery seçici ---------- */
+.gal-albums { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
+.gal-alb { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px; border-radius: 14px; border: 2px solid transparent; background: var(--chip); }
+.gal-alb img { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; }
+.gal-alb span { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gal-alb small { font-size: 10.5px; color: var(--muted); margin-top: -3px; }
+.gal-alb.on { border-color: var(--purple); background: var(--purple-soft); }
+.gal-meta { font-size: 12.5px; color: var(--muted); margin: 2px 0 8px; }
+.gal-grid button { position: relative; }
+.gal-grid button.on { outline: 3px solid var(--purple); outline-offset: -3px; }
+.gal-grid button.on::after { content: '✓'; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: var(--purple); color: #fff; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.gal-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; position: sticky; bottom: 0; padding: 8px 0 2px; background: inherit; }
+.album-strip .ph.add.gal { font-size: 22px; }

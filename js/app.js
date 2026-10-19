@@ -1664,6 +1664,7 @@
         <h3>📷 Fotoğraf gönder</h3>
         <div class="photo-who">${esc(who)} olarak gönderilecek${input.value.trim() ? ' · yazdığın metin açıklama olur' : ''}</div>
         <label class="btn ghost block photo-up">📁 Cihazdan seç<input type="file" accept="image/*" id="phFile" hidden></label>
+        ${GAL ? `<button type="button" class="btn ghost block photo-up" id="phGal">🖼️ ${esc(GAL.name)}'den seç</button>` : ''}
         ${albums.map(m => `<div class="sec-title">${esc(m.name)} albümü</div>
           <div class="pick-photos">${m.album.map(s => `<button type="button" data-ph="${srcs.push(s) - 1}"><img src="${esc(s)}" alt="" loading="lazy"></button>`).join('')}</div>`).join('')}`, 'light');
       const go = src => {
@@ -1678,6 +1679,8 @@
         try { go(await readPhoto(f, 720, false)); } catch (err) { notify('Fotoğraf okunamadı', '⚠️'); }
       };
       sh.el.querySelectorAll('[data-ph]').forEach(b => b.onclick = () => go(srcs[+b.dataset.ph]));
+      const pg = sh.el.querySelector('#phGal');
+      if (pg) pg.onclick = () => { sh.close(); galleryPicker({ title: `${who} olarak fotoğraf gönder` }, ([u]) => go(u)); };
     }
 
     // 🎨 Tema: arka plan (renk, karakter fotoğrafları ya da yüklenen fotoğraf) ve baloncuk stili
@@ -1696,6 +1699,7 @@
           ${TH.backgrounds.map(b => `<button type="button" data-bg="${b.id}" class="${b.cls || ''}${t0.bg === b.id ? ' on' : ''}"${b.css ? ` style="background:${b.css}"` : ''}><span>${esc(b.label)}</span></button>`).join('')}
           ${imgs.map((src, i) => `<button type="button" data-img="${i}" class="${t0.bg === 'img' && t0.img === src ? 'on' : ''}" style="background:url('${esc(src)}') center / cover no-repeat, ${TH.backgrounds[0].css}"><span>📷</span></button>`).join('')}
           <label class="up">➕<span>Fotoğraf yükle</span><input type="file" accept="image/*" id="bgFile" hidden></label>
+          ${GAL ? `<button type="button" class="up" id="bgGal">🖼️<span>${esc(GAL.name)}</span></button>` : ''}
         </div>
         <div class="sec-title">Baloncuklar</div>
         <div class="bub-grid">
@@ -1736,6 +1740,8 @@
         });
       };
       el.querySelectorAll('[data-bg]').forEach(b => b.onclick = () => set({ bg: b.dataset.bg }));
+      const bgGal = el.querySelector('#bgGal');
+      if (bgGal) bgGal.onclick = () => { sh.close(); galleryPicker({ title: 'Sohbet arka planı' }, ([u]) => { set({ bg: 'img', img: u }); notify('Arka plan ayarlandı', '🎨'); }); };
       el.querySelectorAll('[data-img]').forEach(b => b.onclick = () => set({ bg: 'img', img: imgs[+b.dataset.img] }));
       el.querySelectorAll('[data-bub]').forEach(b => b.onclick = () => set({ bubble: b.dataset.bub }));
       el.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
@@ -2159,6 +2165,51 @@
     d.album = [s.profile, ...s.photos].slice(0, MAX_ALBUM).map(f => photoUrl(s, f));
   }
 
+  /* 🖼️ Galeriden fotoğraf seç (js/gallery.js): albüm sekmeleri + fotoğraflar. multi: birden çok seçim (max adede kadar) */
+  const GAL = Stories.Gallery;
+  function galleryPicker(opts, cb) {
+    if (!GAL) return;
+    const sel = [];
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>🖼️ ${esc(opts.title || GAL.name)}</h3>
+      <div class="gal-body"><div class="empty" style="padding:24px">Galeri yükleniyor…</div></div>`, 'light');
+    const body = sh.el.querySelector('.gal-body');
+    const draw = g => {
+      const albums = g.albums;
+      if (!albums.length) { body.innerHTML = '<div class="empty" style="padding:24px">Galeride fotoğraf yok</div>'; return; }
+      const cur = albums.find(a => a.name === ui.galAlbum) || albums[0];
+      ui.galAlbum = cur.name;
+      body.innerHTML = `
+        <div class="gal-albums">${albums.map(a => `<button type="button" class="gal-alb${a === cur ? ' on' : ''}" data-alb="${esc(a.name)}">
+          <img src="${esc(a.cover)}" alt="" loading="lazy"><span>${esc(a.name)}</span><small>${a.photos.length}</small></button>`).join('')}</div>
+        ${cur.category || cur.tags.length ? `<div class="gal-meta">${esc([cur.category, ...cur.tags.map(t => '#' + t)].filter(Boolean).join(' · '))}</div>` : ''}
+        <div class="pick-photos gal-grid">${cur.photos.map(u => `<button type="button" data-gu="${esc(u)}" class="${sel.includes(u) ? 'on' : ''}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('')}</div>
+        <div class="gal-foot">
+          <button type="button" class="btn ghost sm" id="galRef">🔄 Yenile</button>
+          ${opts.multi ? `<button type="button" class="btn primary sm" id="galAdd"${sel.length ? '' : ' disabled'}>Ekle${sel.length ? ` (${sel.length})` : ''}</button>` : ''}
+          <a class="btn ghost sm" href="${esc(GAL.site)}" target="_blank" rel="noopener">Galeriyi aç ↗</a>
+        </div>`;
+    };
+    const fail = e => { body.innerHTML = `<div class="empty" style="padding:24px">⚠️ ${esc(e.message || 'Galeri okunamadı')}<br><button type="button" class="btn ghost sm" id="galRef" style="margin-top:10px">🔄 Tekrar dene</button></div>`; };
+    GAL.load().then(draw, fail);
+    sh.el.onclick = e => {
+      const alb = e.target.closest('[data-alb]');
+      if (alb) { ui.galAlbum = alb.dataset.alb; draw(GAL.cached()); return; }
+      if (e.target.closest('#galRef')) { body.innerHTML = '<div class="empty" style="padding:24px">Yenileniyor…</div>'; GAL.load(true).then(draw, fail); return; }
+      if (e.target.closest('#galAdd')) { sh.close(); cb(sel); return; }
+      const ph = e.target.closest('[data-gu]');
+      if (!ph) return;
+      const u = ph.dataset.gu;
+      if (!opts.multi) { sh.close(); cb([u]); return; }
+      const i = sel.indexOf(u);
+      if (i >= 0) sel.splice(i, 1);
+      else if (!opts.max || sel.length < opts.max) sel.push(u);
+      else { notify(`En fazla ${opts.max} fotoğraf`, '🖼️'); return; }
+      draw(GAL.cached());
+    };
+  }
+
   /* Modlar (js/data/mods.js): her modun hazır karakter listesi { id, name, thumb, apply(d) } */
   const MODS = Stories.MODS || [];
   const modOf = id => MODS.find(m => m.id === id) || MODS[0];
@@ -2174,9 +2225,22 @@
     if (p.bg) d.theme = { bg: 'img', img: p.bg, bubble: 'amor' };
   }
 
+  // 🖼️ Lara Gallery albümü (js/gallery.js) bir karakter seti olur: kapak profil, ilk fotoğraflar albüm
+  function applyGallery(d, a) {
+    if (!d.name || (d.set || '').startsWith('lara:')) d.name = a.name;
+    d.set = `lara:${a.name}`;
+    d.mod = 'lara';
+    d.photo = a.cover;
+    d.album = [a.cover, ...a.photos.filter(p => p !== a.cover)].slice(0, MAX_ALBUM);
+  }
+
   function presets(modId) {
     if (modId === 'amor') return SETS.map(s => ({ id: s.id, name: setName(s), thumb: photoUrl(s, s.profile), apply: d => applySet(d, s) }));
     const m = modOf(modId);
+    if (m.gallery) {
+      const g = GAL && GAL.cached();
+      return g ? g.albums.map(a => ({ id: `lara:${a.name}`, name: a.name, thumb: a.cover, apply: d => applyGallery(d, a) })) : [];
+    }
     return (m.characters || []).map(p => ({ id: `${m.id}:${p.key}`, name: p.name, thumb: p.photo || p.album[0], colors: p.colors, apply: d => applyPreset(d, m, p) }));
   }
 
@@ -2290,8 +2354,9 @@
                 ${p.thumb ? `<img src="${esc(p.thumb)}" alt="" loading="lazy">`
                   : `<div class="set-ph" style="background:${esc(grad(p))}">${initial(p.name)}</div>`}
                 <span>${used.has(p.id) ? 'kullanımda' : esc(p.name)}</span>
-              </button>`).join('') || '<div class="empty" style="padding:16px">Bu modda karakter yok</div>'}
+              </button>`).join('') || `<div class="empty" style="padding:16px">${mod.gallery && !GAL.cached() ? 'Galeri yükleniyor…' : 'Bu modda karakter yok'}</div>`}
           </div>
+          ${mod.gallery ? `<button type="button" class="btn ghost sm" id="galSets" style="margin-top:8px">🔄 Albümleri yenile</button> <a class="btn ghost sm" href="${esc(GAL.site)}" target="_blank" rel="noopener" style="margin-top:8px">Galeriyi aç ↗</a>` : ''}
           ${!id && mod.id !== 'amor' && list.some(p => !used.has(p.id)) ? `<button type="button" class="btn ghost block" id="addAll" style="margin-top:10px">➕ Tüm ${esc(mod.name)} karakterlerini ekle (${list.filter(p => !used.has(p.id)).length})</button>` : ''}
         </div>
 
@@ -2302,6 +2367,7 @@
               <input type="file" accept="image/*" id="photoIn" hidden></label>
             <div class="pp-side">
               <small>Mesajlarda ve profilde görünür.</small>
+              ${GAL ? `<button type="button" class="chip" id="galPP">🖼️ ${esc(GAL.name)}'den seç</button>` : ''}
               ${d.photo ? '<button type="button" class="chip" id="rmPhoto">Fotoğrafı kaldır</button>' : ''}
             </div>
           </div>
@@ -2313,6 +2379,7 @@
             ${d.album.map((src, i) => `<div class="ph${src === d.photo ? ' is-pp' : ''}"><img src="${esc(src)}" alt=""><button type="button" class="rm" data-rm="${i}" aria-label="Sil">✕</button>
               <button type="button" class="pp" data-setpp="${i}" title="Profil fotoğrafı yap">${src === d.photo ? '👤 Profil' : '👤'}</button></div>`).join('')}
             ${d.album.length < MAX_ALBUM ? '<label class="ph add">+<input type="file" accept="image/*" multiple id="albumIn" hidden></label>' : ''}
+            ${d.album.length < MAX_ALBUM && GAL ? `<button type="button" class="ph add gal" id="galAlbum" title="${esc(GAL.name)}'den ekle">🖼️</button>` : ''}
           </div>
         </div>
 
@@ -2384,6 +2451,19 @@
     else if ($('.set.on')) $('.set.on').scrollIntoView({ inline: 'center', block: 'nearest' });
 
     const redraw = () => { const y = window.scrollY; renderCreate(id); window.scrollTo(0, y); };
+    // 🖼️ Lara Gallery: albümler gelince listeyi yenile; profil / albüm için galeriden seçim
+    if (mod.gallery && !GAL.cached()) GAL.load().then(() => { if (ui.createMod === mod.id && ui.route.name === 'create') redraw(); }, e => notify(e.message, '⚠️'));
+    if ($('#galSets')) $('#galSets').onclick = () => GAL.load(true).then(() => { redraw(); notify('Albümler yenilendi', '🖼️'); }, e => notify(e.message, '⚠️'));
+    if ($('#galPP')) $('#galPP').onclick = () => galleryPicker({ title: 'Profil fotoğrafı' }, ([u]) => {
+      d.photo = u;
+      if (!d.album.includes(u) && d.album.length < MAX_ALBUM) d.album.unshift(u);
+      redraw();
+    });
+    if ($('#galAlbum')) $('#galAlbum').onclick = () => galleryPicker({ title: 'Albüme ekle', multi: true, max: MAX_ALBUM - d.album.length }, us => {
+      us.forEach(u => { if (!d.album.includes(u) && d.album.length < MAX_ALBUM) d.album.push(u); });
+      if (!d.photo && d.album.length) d.photo = d.album[0];
+      redraw();
+    });
     view.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { list.find(p => p.id === b.dataset.set).apply(d); redraw(); });
     view.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => {
       if (ui.createMod === b.dataset.mod) return;
@@ -3055,10 +3135,14 @@
         <div class="sheet-grip"></div>
         <h3>🖼️ Senaryo kapağı</h3>
         <label class="btn ghost block photo-up">📁 Cihazdan seç<input type="file" accept="image/*" id="cvFile" hidden></label>
+        ${GAL ? `<button type="button" class="btn ghost block photo-up" id="cvGal">🖼️ ${esc(GAL.name)}'den seç</button>` : ''}
         ${pics.length ? `<div class="sec-title">${scChars(sc).length ? 'Karakterlerin fotoğrafları' : 'Tüm karakterler'}</div>
           <div class="pick-photos">${pics.map((s, i) => `<button type="button" data-cv="${i}"><img src="${esc(s)}" alt="" loading="lazy"></button>`).join('')}</div>`
           : '<div class="about">Karakterlerin fotoğrafı yok; cihazından seçebilirsin.</div>'}`, 'light');
-      sh.el.onclick = e => { const b = e.target.closest('[data-cv]'); if (b) { sh.close(); set({ cover: pics[+b.dataset.cv] }); } };
+      sh.el.onclick = e => {
+        if (e.target.closest('#cvGal')) { sh.close(); galleryPicker({ title: 'Senaryo kapağı' }, ([u]) => set({ cover: u })); return; }
+        const b = e.target.closest('[data-cv]'); if (b) { sh.close(); set({ cover: pics[+b.dataset.cv] }); }
+      };
       sh.el.querySelector('#cvFile').onchange = async e => {
         const f = e.target.files[0];
         if (!f) return;

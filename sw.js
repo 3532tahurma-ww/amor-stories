@@ -4,10 +4,10 @@
  * arka planda güncellenir (stale-while-revalidate). Fotoğraflar ilk görüldüklerinde saklanır.
  * Yeni sürüm yayınlarken VERSION'ı artır, eski önbellek silinir.
  */
-const VERSION = 'amor-stories-v43';
+const VERSION = 'amor-stories-v44';
 const CORE = [
   './', './index.html', './manifest.json', './css/style.css', './css/stories.css',
-  './js/store.js', './js/data/traits.js', './js/data/amor-pools.js', './js/data/pools.js', './js/data/photos.js', './js/data/mod-photos.js', './js/data/mods.js', './js/data/themes.js', './js/data/places.js', './js/data/monia.js', './js/data/effects.js', './js/data/emojis.js', './js/data/bot-rules.js', './js/bot.js', './js/app.js',
+  './js/store.js', './js/data/traits.js', './js/data/amor-pools.js', './js/data/pools.js', './js/data/photos.js', './js/data/mod-photos.js', './js/data/mods.js', './js/data/themes.js', './js/data/places.js', './js/data/monia.js', './js/data/effects.js', './js/data/emojis.js', './js/data/bot-rules.js', './js/bot.js', './js/gallery.js', './js/app.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 const IMG_CACHE = 'amor-stories-img';
@@ -30,8 +30,12 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.pathname.includes('/tools/') || url.pathname.startsWith('/api/')) return;
 
+  // 🖼️ Lara Gallery (js/gallery.js): albums.json her zaman ağdan; fotoğrafların adı değişmez, önce önbellek
+  const gallery = url.pathname.includes('/lara-gallery/');
+  if (gallery && url.pathname.endsWith('.json')) return;
+
   // Karakter ve mod fotoğrafları: önce önbellek
-  if (url.origin === location.origin && (url.pathname.includes('/characters/') || url.pathname.includes('/mods/'))) {
+  if (gallery || (url.origin === location.origin && (url.pathname.includes('/characters/') || url.pathname.includes('/mods/')))) {
     e.respondWith(caches.open(IMG_CACHE).then(async cache => {
       const hit = await cache.match(req);
       if (hit) return hit;
