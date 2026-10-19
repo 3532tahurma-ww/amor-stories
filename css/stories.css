@@ -502,3 +502,82 @@ button.chip { border: 0; cursor: pointer; }
 .pl-own #plName { flex: 1; min-width: 0; }
 #plHint { width: 100%; resize: vertical; margin-bottom: 12px; display: block; }
 .pl-roll { font-size: 16px; margin-left: 4px; vertical-align: middle; }
+/* ---------- 🎬 Monia Paneli ---------- */
+.monia { padding-top: 14px; }
+.monia .card { margin-bottom: 12px; }
+.monia .sec-title small { color: var(--muted); font-weight: 400; font-size: 13px; }
+.mo-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+.mo-sc { display: flex; align-items: center; gap: 12px; margin-bottom: 0 !important; padding: 12px 14px; }
+.mo-sc-ic { font-size: 30px; }
+.mo-sc-body { flex: 1; min-width: 0; }
+.mo-sc-body b { display: block; font-weight: 600; }
+.mo-sc-body small { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mo-sc-avas { display: flex; }
+.mo-sc-avas .ava { margin-left: -8px; border: 2px solid var(--card); }
+.mo-cat { margin-top: 12px; }
+.mo-cat-head, .mo-sub { font-weight: 600; margin: 10px 0 6px; }
+.mo-cat-head small { color: var(--muted); font-weight: 400; }
+.mo-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mo-chip { padding: 6px 12px; border-radius: 999px; background: var(--chip); font-size: 13.5px; border: 2px solid transparent; }
+.mo-chip.mine { background: var(--purple-soft); color: var(--purple); }
+.mo-chip.on { border-color: var(--purple); background: var(--purple-soft); }
+.mo-empty { color: var(--muted); }
+.mo-top { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.mo-top input { flex: 1; min-width: 0; font-size: 20px; font-weight: 600; border: 0; border-bottom: 2px solid var(--line); background: transparent; padding: 6px 2px; outline: none; }
+.mo-top input:focus { border-color: var(--purple); }
+.monia .chips { margin-bottom: 8px; }
+.chip.mo-pick { font-size: 13.5px; padding: 6px 12px; cursor: pointer; }
+.chip.mo-pick.on { background: var(--purple); color: #fff; }
+.mo-evs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.mo-ev { display: flex; align-items: flex-start; gap: 10px; background: var(--chip); border-radius: 12px; padding: 8px 10px; }
+.mo-ev .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--purple); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.mo-ev .t { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; }
+.mo-ev .a { flex: none; display: flex; gap: 2px; }
+.mo-ev .a button { font-size: 13px; padding: 2px 4px; opacity: .75; }
+.mo-ev-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mo-vars { font-size: 12px; color: var(--muted); margin: 6px 0 4px; }
+.mo-vars code { background: var(--chip); border-radius: 6px; padding: 0 4px; }
+.mo-check { display: flex; align-items: center; gap: 8px; margin: 10px 0 12px; font-size: 14px; }
+.sheet .field textarea, .sheet .field select { width: 100%; border-radius: 12px; border: 1px solid var(--line); padding: 10px 14px; outline: none; background: #fafafc; font-size: 15px; resize: vertical; }
+.sheet .field select { height: 46px; padding: 0 10px; }.mo-fold { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
+.mo-fold .sec-title { margin: 0; flex: none; }
+.mo-fold small { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mo-fold i { font-style: normal; color: var(--muted); font-size: 16px; }
+.mo-fold:not(.closed) { margin-bottom: 10px; }
+.pl-grid button.mine { border-style: dashed; }
+.mo-area { width: 100%; border-radius: 12px; border: 1px solid var(--line); padding: 10px 14px; outline: none; background: #fafafc; font-size: 15px; line-height: 1.45; resize: vertical; }
+.mo-area:focus { border-color: var(--purple); background: #fff; }
+.mo-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.mo-step { display: flex; align-items: center; gap: 6px; }
+.mo-step .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--purple); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.mo-step input { flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line); padding: 0 12px; outline: none; background: #fafafc; }
+.mo-step button { font-size: 13px; padding: 2px 4px; opacity: .75; }
+.mo-ev .t, .scene-card span { white-space: pre-line; }
+.scene-card.mo-prev { width: 100%; margin: 0; background: linear-gradient(135deg, #2e2350, #4a2a5e); cursor: default; }.mo-cover { position: relative; height: 190px; border-radius: var(--radius); margin-bottom: 12px; background: center 20% / cover no-repeat; display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; padding: 10px; }
+.mo-cover::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(transparent 55%, rgba(0, 0, 0, .35)); pointer-events: none; }
+.mo-cover .btn { position: relative; background: rgba(255, 255, 255, .9); }
+.mo-cover.empty { height: auto; padding: 0; justify-content: stretch; }
+.mo-cover.empty::before { display: none; }
+.mo-cover.empty .btn { flex: 1; background: var(--chip); border: 2px dashed var(--line); }
+.mo-sc-cover { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; flex: none; }
+.mo-sc-desc { font-style: italic; }
+.mo-tag { display: inline-block; font-style: normal; font-size: 12px; background: var(--purple-soft); color: var(--purple); border-radius: 999px; padding: 0 8px; margin-right: 6px; }
+.sys { white-space: pre-line; }
+/* ---------- Ana sayfa menüsü: 💬 Yazışmalar | 🎬 Monia ---------- */
+.home-switch { display: flex; gap: 4px; padding: 4px; margin: 4px 0 12px; background: var(--chip); border-radius: 999px; }
+.home-switch button { flex: 1; height: 38px; border-radius: 999px; font-weight: 600; font-size: 15px; color: var(--muted); transition: background .15s, color .15s; }
+.home-switch button.on { background: #fff; color: var(--text); box-shadow: 0 2px 8px rgba(40, 20, 90, .1); }
+.home.compact .home-switch { margin-bottom: 8px; }
+.mo-filter { margin: 0 0 12px; }
+.story-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.story-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+.st-cover { position: relative; height: 150px; background: linear-gradient(135deg, #a78bfa, #ff8cc0) center 20% / cover no-repeat; display: flex; align-items: center; justify-content: center; }
+.st-cover > span { font-size: 54px; }
+.st-avas { position: absolute; left: 10px; bottom: 10px; display: flex; }
+.st-avas .ava { margin-right: -8px; border: 2px solid #fff; }
+.st-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; }
+.st-body b { font-size: 17px; font-weight: 600; }
+.st-body p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.st-body small { color: var(--muted); font-size: 12.5px; }
+.st-acts { display: flex; gap: 6px; margin-top: 4px; }
+.st-acts .btn { padding: 0 12px; }

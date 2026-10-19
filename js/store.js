@@ -13,6 +13,7 @@
  * side:       sohbet id -> şu an kim yazıyor ('me' | 'her')
  * turns:      sohbet id -> her mesajdan sonra taraf otomatik değişsin mi
  * pinned:     mesaj listesinde sabitlenen karakter id'leri (en fazla 4)
+ * monia:      Monia Paneli senaryoları ve kalıp olayları (aşağıda)
  */
 window.Stories = window.Stories || {};
 
@@ -26,7 +27,12 @@ Stories.Store = (() => {
     side: {},
     turns: {},
     pinned: [],
-    keywords: []   // [{ id, word, effect }] sayılan anahtar kelimeler; effect varsa geçtiği mesaja uygulanır
+    keywords: [],  // [{ id, word, effect }] sayılan anahtar kelimeler; effect varsa geçtiği mesaja uygulanır
+    // Monia Paneli: events = kendi kalıp olayların [{ id, title, text, cat }],
+    // scenarios = [{ id, title, desc, cover (resim), chars: [], part, day, season, timeNote, place, placeName, placeIcon, events: [{ id, title, text }], created }]
+    // places = eklediğin mekanlar [{ id, icon, name, tags: [etiket id], hints: [] }], groups = kendi etiketlerin [{ id, icon, name }]
+    // events: { title, cat, text, steps: [], opener, starter, tones: [], note, part, when, place (olayın kendi zamanı / mekanı), base? (değiştirdiğin hazır olayın id'si) }
+    monia: { events: [], scenarios: [], places: [], groups: [] }
   });
 
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };

@@ -3,7 +3,7 @@
  * ---------------------
  * Amor'un ekranları; karakterler sadece "Oluştur" ekranından gelir ve sohbette iki tarafı da kullanıcı yazar.
  * Hash tabanlı yönlendirme (GitHub Pages ile uyumlu):
- *   #/home  #/messages  #/create  #/create/<id>  #/me  #/p/<id>  #/chat/<id>
+ *   #/home  #/messages  #/create  #/create/<id>  #/monia  #/monia/<senaryo id>  #/me  #/p/<id>  #/chat/<id>
  */
 (() => {
   const Store = Stories.Store;
@@ -212,6 +212,7 @@
     const t = r.name === 'chat' ? threadById(r.id) : null;
     const c = t ? (t.group ? null : byId(t.charId)) : r.id ? byId(r.id) : null;
     ui.chatKeys = null;
+    view.onclick = null;
     const full = ['p', 'chat'].includes(r.name) || (r.name === 'create' && r.id);
     app.classList.toggle('no-nav', !!full);
     document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('active', a.dataset.tab === r.name && !full));
@@ -224,6 +225,7 @@
     switch (r.name) {
       case 'messages': return renderMessages();
       case 'me': return renderMe();
+      case 'monia': return renderMonia(r.id, r.extra);
       case 'p': return renderProfile(c);
       case 'chat': return renderChat(c, t);
       case 'create': return renderCreate(r.id && byId(r.id) ? r.id : null);
@@ -233,6 +235,7 @@
 
   /* ---------- Ana sayfa ---------- */
   function renderHome() {
+    if (homeMode() === 'monia') return renderHomeMonia();
     const tabs = [['all', 'Tümü'], ['recent', 'Son yazılan'], ['new', 'Yeni']];
     let list = [...chars()];
     const lastAct = c => { const t = currentThread(c); return t ? activity(t) : 0; };
@@ -243,6 +246,7 @@
     view.innerHTML = `
       <div class="page-pad home ${window.scrollY > 120 ? 'compact' : ''}">
         <div class="home-top">
+          ${homeSwitch()}
           <div class="banners">
             <a class="banner gold" href="#/create"><b>Karakter oluştur</b><small>fotoğraf + kişilik</small><span class="art">✨</span></a>
             <a class="banner green" href="#/messages"><b>Hikayeler</b><small>${chatCount} sohbet</small><span class="art">💬</span></a>
@@ -260,6 +264,7 @@
         </div>
       </div>`;
 
+    bindHomeSwitch();
     view.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { ui.homeTab = b.dataset.tab; renderHome(); });
     view.querySelectorAll('.row').forEach(row => row.onclick = e => {
       const c = byId(row.dataset.id);
@@ -949,7 +954,12 @@
 
   /* Sohbet teması (js/data/themes.js): sohbetin kendi teması > karakterin varsayılanı > Amor */
   const TH = Stories.Themes;
-  const PLACES = Stories.PLACES || [], PLACE_GROUPS = Stories.PLACE_GROUPS || [];
+  // Mekanlar: js/data/places.js + Monia'da eklediklerin (S().monia.places, etiketleri tags), etiketler: gruplar + S().monia.groups
+  const BASE_PLACES = Stories.PLACES || [], BASE_GROUPS = Stories.PLACE_GROUPS || [];
+  const allPlaces = () => [...BASE_PLACES, ...((S().monia || {}).places || [])];
+  const allGroups = () => [...BASE_GROUPS, ...((S().monia || {}).groups || [])];
+  const inGroup = (p, g) => p.group === g.id || (p.tags || []).includes(g.id);
+  const groupOf = p => p.group || (p.tags || []).find(t => BASE_GROUPS.some(g => g.id === t)) || 'yol';
   const themeOf = (th, c) => Object.assign({ bg: 'amor', bubble: 'amor' }, c.theme || {}, th.theme || {});
 
   function bubbleVars(b, c) {
@@ -1310,8 +1320,8 @@
     const pickOf = a => a[Math.floor(Math.random() * a.length)];
     function pickPlace(exclude) {
       const h = new Date().getHours();
-      let pool = PLACES.filter(p => inHours(p.hours, h) && p.id !== exclude);
-      if (!pool.length) pool = PLACES;
+      let pool = allPlaces().filter(p => inHours(p.hours, h) && p.id !== exclude);
+      if (!pool.length) pool = allPlaces();
       const p = pickOf(pool);
       return { place: p.id, icon: p.icon, name: p.name, hint: pickOf(p.hints) };
     }
@@ -1320,12 +1330,19 @@
       let i = list.length - 1;
       while (i >= 0 && !list[i].scene) i--;
       const last = list[i];
+      // 🎬 Monia senaryosu: sıradaki olay
+      const scn = th.scenario;
+      if (scn && scn.i < scn.events.length) {
+        // olayın kendi mekanı varsa hikaye oraya geçer
+        const at = last ? last.scene : {}, n = scn.i++, e = typeof scn.events[n] === 'string' ? { text: scn.events[n] } : scn.events[n];
+        return { place: e.place || at.place || '', icon: e.icon || at.icon || '🎬', name: e.name || at.name || th.title, hint: e.text, kind: 'hint', ev: `${n + 1}/${scn.events.length}` };
+      }
       if (!last) return pickPlace();
       // buraya gelindiği kart (ipucu olmayan son mekan kartı) ve sonrası
       let j = i;
       while (j > 0 && !(list[j].scene && !list[j].scene.kind)) j--;
       const here = list.slice(j).filter(m => m.scene), used = new Set(here.map(m => m.scene.hint));
-      const p = PLACES.find(x => x.id === last.scene.place), sc = last.scene;
+      const p = allPlaces().find(x => x.id === last.scene.place), sc = last.scene;
       const left = p ? p.hints.filter(h => !used.has(h)) : [];
       if (left.length) return { ...sc, hint: pickOf(left), kind: 'hint' };
       const moments = (Stories.MOMENTS || []).filter(h => !used.has(h));
@@ -1343,7 +1360,7 @@
       save(); draw(); refreshList();
     }
     function autoScene() {
-      if (cs.playing || !PLACES.length) return;
+      if (cs.playing || !allPlaces().length) return;
       let i = list.length - 1;
       while (i >= 0 && !list[i].scene) i--;
       if (i >= 0 && list.slice(i + 1).filter(m => m.from !== 'sys').length < HINT_EVERY) return;
@@ -1356,8 +1373,8 @@
       const sh = sheet(`
         <div class="sheet-grip"></div>
         <h3>📍 ${m ? 'Mekanı değiştir' : 'Yeni mekan'}</h3>
-        ${PLACE_GROUPS.map(g => `<div class="sec-title">${g.icon} ${esc(g.name)}</div>
-          <div class="pl-grid">${PLACES.filter(p => p.group === g.id).map(p => `<button type="button" data-pl="${p.id}" class="${p.id === cur.place ? 'on' : ''}"><span>${p.icon}</span><small>${esc(p.name)}</small></button>`).join('')}</div>`).join('')}
+        ${allGroups().map(g => `<div class="sec-title">${g.icon} ${esc(g.name)}</div>
+          <div class="pl-grid">${allPlaces().filter(p => inGroup(p, g)).map(p => `<button type="button" data-pl="${p.id}" class="${p.id === cur.place ? 'on' : ''}"><span>${p.icon}</span><small>${esc(p.name)}</small></button>`).join('')}</div>`).join('')}
         <div class="sec-title">Kendi mekanın (isteğe bağlı)</div>
         <div class="pl-own"><input id="plIcon" maxlength="4" placeholder="📍"><input id="plName" maxlength="40" placeholder="ör. Büyükannesinin bahçesinde"></div>
         <div class="sec-title">İpucu <button type="button" class="pl-roll" id="plRoll" aria-label="Başka bir ipucu">🎲</button></div>
@@ -1365,7 +1382,7 @@
         <button type="button" class="btn pink block" id="plSave">${m ? 'Kaydet' : 'Mekanı ekle'}</button>`, 'light');
       const hintEl = sh.el.querySelector('#plHint');
       const roll = () => {
-        const p = PLACES.find(x => x.id === cur.place);
+        const p = allPlaces().find(x => x.id === cur.place);
         if (!p) return;
         const left = p.hints.map(fillHint).filter(h => h !== hintEl.value);
         hintEl.value = pickOf(left.length ? left : p.hints.map(fillHint));
@@ -1373,7 +1390,7 @@
       sh.el.onclick = e => {
         const b = e.target.closest('[data-pl]');
         if (b) {
-          const p = PLACES.find(x => x.id === b.dataset.pl);
+          const p = allPlaces().find(x => x.id === b.dataset.pl);
           Object.assign(cur, { place: p.id, icon: p.icon, name: p.name });
           sh.el.querySelectorAll('[data-pl]').forEach(x => x.classList.toggle('on', x === b));
           roll();
@@ -2064,10 +2081,10 @@
     if (!prev || m.ts - prev.ts > 10 * 60 * 1000) html += `<div class="stamp">${fmtTime(m.ts)}</div>`;
     if (m.from === 'sys' && m.scene) {
       // 📍 mekan kartı; kind 'hint' = aynı yerde sıradaki an (küçük kart)
-      const sc = m.scene, p = PLACES.find(x => x.id === sc.place) || {}, hint = sc.kind === 'hint';
-      return html + `<div class="scene-card g-${esc(p.group || 'yol')}${hint ? ' sc-hint' : ''}" data-id="${m.id}">
-        <div class="sc-ic">${hint ? '💡' : esc(sc.icon || '📍')}</div>
-        <div class="sc-body"><small>${hint ? `İpucu · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : '📍 Mekan'}</small>${hint ? '' : `<b>${esc(sc.name || 'Bir yerde')}</b>`}<span>${txt(m.text)}</span></div></div>`;
+      const sc = m.scene, p = allPlaces().find(x => x.id === sc.place) || {}, hint = sc.kind === 'hint';
+      return html + `<div class="scene-card g-${esc(groupOf(p))}${hint ? ' sc-hint' : ''}" data-id="${m.id}">
+        <div class="sc-ic">${sc.ev ? '📜' : hint ? '💡' : esc(sc.icon || '📍')}</div>
+        <div class="sc-body"><small>${sc.ev ? `📜 Olay ${esc(sc.ev)} · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : hint ? `İpucu · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : '📍 Mekan'}</small>${hint ? '' : `<b>${esc(sc.name || 'Bir yerde')}</b>`}<span>${txt(m.text)}</span></div></div>`;
     }
     if (m.from === 'sys') return html + `<div class="sys" data-id="${m.id}">${txt(m.text)}</div>`;
 
@@ -2491,6 +2508,693 @@
   }
 
   /* ---------- Ben ---------- */
+  /* ---------- 🎬 Monia Paneli: senaryo (zaman + mekan + olaylar) üret, hikayeyi onunla başlat ----------
+   * Veriler: js/data/monia.js (zamanlar, hazır olay havuzu), js/data/places.js (mekanlar), S().monia (senin senaryo ve kalıpların) */
+  const MD = Stories.MONIA || { parts: [], days: [], seasons: [], cats: [] };
+  const MO = () => S().monia;
+  const pickOne = a => a[Math.floor(Math.random() * a.length)];
+  const MINE = { id: 'mine', icon: '✍️', label: 'Kalıplarım' };
+  const moCats = () => [...MD.cats, MINE];
+  // Kategorideki olaylar: hazırlar (b:...) + senin kalıpların (cat'e göre)
+  function poolOf(cat) {
+    const raw = cat.from === 'extra' ? ((T.groups.find(g => g.id === 'extra') || {}).items || []) : (cat.items || []);
+    const built = [...new Set(raw)].map(x => typeof x === 'string' ? { title: x, text: '' } : { title: x.title, text: x.text || '' })
+      .map(x => ({ id: `b:${cat.id}:${x.title}`, ...x, cat: cat.id, builtin: true }));
+    // detaylandırdığın hazır olay (base) hazırın yerine geçer
+    const over = new Set(MO().events.map(e => e.base).filter(Boolean));
+    return [...built.filter(b => !over.has(b.id)), ...MO().events.filter(e => (e.cat || 'mine') === cat.id)];
+  }
+  const allEvents = () => moCats().flatMap(poolOf);
+  const partOf = sc => MD.parts.find(p => p.id === sc.part);
+  const placeOfSc = sc => allPlaces().find(p => p.id === sc.place);
+  const scPlaceName = sc => sc.placeName || (placeOfSc(sc) || {}).name || '';
+  const scPlaceIcon = sc => sc.placeIcon || (placeOfSc(sc) || {}).icon || '📍';
+  const timeLabel = sc => [sc.day, sc.season, (partOf(sc) || {}).label, sc.timeNote].filter(Boolean).join(', ');
+  const scChars = sc => (sc.chars || []).map(byId).filter(Boolean);
+  // olay metni: değişkenler doldurulur; metni olmayan hazır olay başlığıyla görünür.
+  // short: sadece anlatım (senaryo notu için); değilse akış, açılış repliği ve ton da eklenir
+  // olayın kendi zamanı / mekanı (yoksa senaryonunki geçerli)
+  const evPlace = ev => ev.place ? allPlaces().find(p => p.id === ev.place) : null;
+  const evTime = ev => [(MD.parts.find(p => p.id === ev.part) || {}).label, ev.when].filter(Boolean).join(', ');
+  function evText(ev, sc, short) {
+    const ms = scChars(sc || {}), ben = ms.length ? ms.map(m => m.name.split(' ')[0]).join(' ve ') : 'O';
+    let t = ev.text || `${(moCats().find(c => c.id === ev.cat) || MINE).icon} ${ev.title}`;
+    const ep = evPlace(ev), et = evTime(ev);
+    if (short && (ep || et)) t += ` (${[et && `🕰️ ${et}`, ep && `${ep.icon} ${ep.name}`].filter(Boolean).join(' · ')})`;
+    if (!short && et) t = `🕰️ ${et}\n${t}`;
+    if (!short) {
+      const steps = (ev.steps || []).filter(Boolean);
+      if (steps.length) t += '\n' + steps.map(s => `• ${s}`).join('\n');
+      if (ev.opener) t += `\n💬 ${ev.starter === 'ben' ? '{ben}: ' : ev.starter === 'sen' ? '{sen}: ' : ''}"${ev.opener}"`;
+      if ((ev.tones || []).length) t += `\n🎭 ${ev.tones.join(' · ')}`;
+    }
+    sc = sc || {};
+    return t.replace(/\{ben\}/g, ben).replace(/\{sen\}/g, userName()).replace(/\{mekan\}/g, (ep && ep.name) || scPlaceName(sc) || 'Bir yerde')
+      .replace(/\{zaman\}/g, et || timeLabel(sc) || 'bir gün');
+  }
+  const EV_FIELDS = ['title', 'text', 'cat', 'steps', 'opener', 'starter', 'tones', 'note', 'part', 'when', 'place'];
+  const evCopy = e => {
+    const o = { id: Store.uid() };
+    EV_FIELDS.forEach(k => { if (e[k] != null && e[k] !== '') o[k] = Array.isArray(e[k]) ? [...e[k]] : e[k]; });
+    o.text = o.text || ''; o.cat = o.cat || 'mine';
+    return o;
+  };
+
+  // Rastgele senaryo: zaman, o saate uyan bir mekan, 3-5 olay
+  function randomScenario() {
+    const part = pickOne(MD.parts), h = part ? part.hour : new Date().getHours();
+    const inH = hr => !hr || (hr[0] <= hr[1] ? h >= hr[0] && h < hr[1] : h >= hr[0] || h < hr[1]);
+    const places = allPlaces().filter(p => inH(p.hours));
+    const pl = pickOne(places.length ? places : allPlaces()) || {};
+    const pool = allEvents(), events = [];
+    for (let n = 3 + Math.floor(Math.random() * 3); events.length < n && events.length < pool.length;) {
+      const e = pickOne(pool);
+      if (!events.some(x => x.title === e.title)) events.push(evCopy(e));
+    }
+    const ch = chars().length ? [pickOne(chars()).id] : [];
+    return { id: Store.uid(), title: `${pl.icon || '🎬'} ${pl.name || 'Senaryo'}`, chars: ch, part: part ? part.id : '', day: Math.random() < .6 ? pickOne(MD.days) : '',
+      season: Math.random() < .4 ? pickOne(MD.seasons) : '', timeNote: '', place: pl.id || '', placeName: '', placeIcon: '', events, created: Date.now() };
+  }
+  function addScenario(sc) { MO().scenarios.unshift(sc); save(); location.hash = `#/monia/${sc.id}`; }
+
+  // 🏷️ senaryo etiketleri: hazırlar (js/data/monia.js scTags) + senaryolarda kullandıkların
+  const allScTags = () => [...new Set([...(MD.scTags || []), ...MO().scenarios.flatMap(s => s.tags || [])])];
+  const tagChips = (list, on, attr = 'data-stag') => list.map(t => `<button type="button" class="chip mo-pick${on.includes(t) ? ' on' : ''}" ${attr}="${esc(t)}">🏷️ ${esc(t)}</button>`).join('');
+  // senaryodan başlatılan sohbetler ve en son ne zaman oynandığı
+  const scThreads = sc => threads().filter(t => t.scenario && t.scenario.id === sc.id).sort((a, b) => activity(b) - activity(a));
+  const scPlayed = sc => { const t = scThreads(sc)[0]; return t ? activity(t) : 0; };
+
+  /* 📤📥 Senaryoları JSON olarak dışa / içe aktar (tüm uygulama yedeğinden ayrı).
+   * Dosya: { format: 'amor-stories-monia', version: 1, scenarios, events, places, groups } — kendi kalıpların, mekanların ve etiketlerin de içinde */
+  function downloadJson(obj, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function exportScenarios(list) {
+    const placeIds = new Set(list.flatMap(s => [s.place, ...s.events.map(e => e.place)]).filter(Boolean));
+    const places = list.length === MO().scenarios.length ? MO().places : MO().places.filter(p => placeIds.has(p.id));
+    const groupIds = new Set(places.flatMap(p => p.tags || []));
+    const day = new Date().toISOString().slice(0, 10);
+    downloadJson({ format: 'amor-stories-monia', version: 1, exported: day,
+      scenarios: list.map(s => { const c = JSON.parse(JSON.stringify(s)); c.charNames = scChars(s).map(m => m.name); return c; }),
+      events: MO().events, places, groups: MO().groups.filter(g => groupIds.has(g.id)) },
+      list.length === 1 ? `monia-${(list[0].title || 'senaryo').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase()}-${day}.json` : `monia-senaryolar-${day}.json`);
+    notify(`${list.length} senaryo dışa aktarıldı`, '📤');
+  }
+  function importScenarios() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const data = JSON.parse(await f.text());
+        if (!data || data.format !== 'amor-stories-monia' || !Array.isArray(data.scenarios)) throw new Error('format');
+        const has = (arr, id) => arr.some(x => x.id === id);
+        ['groups', 'places', 'events'].forEach(k => (data[k] || []).forEach(x => { if (x && x.id && !has(MO()[k], x.id)) MO()[k].push(x); }));
+        let n = 0;
+        data.scenarios.forEach(s => {
+          if (!s || !Array.isArray(s.events)) return;
+          const c = { ...s, id: has(MO().scenarios, s.id) ? Store.uid() : s.id || Store.uid(), tags: s.tags || [], created: s.created || Date.now() };
+          // karakterler bu cihazda yoksa adlarından bulunur, bulunamazsa boş kalır (başlatırken seçersin)
+          c.chars = (s.chars || []).map((id, i) => byId(id) ? id : (chars().find(m => m.name === (s.charNames || [])[i]) || {}).id).filter(Boolean);
+          delete c.charNames;
+          MO().scenarios.unshift(c); n++;
+        });
+        save();
+        notify(`${n} senaryo içe aktarıldı`, '📥');
+        render();
+      } catch (e) { notify('Bu dosya bir Monia senaryo dosyası değil', '⚠️'); }
+    };
+    inp.click();
+  }
+
+  // Senaryoda karakter yoksa başlatırken seçilir (bir ya da birkaç; birden fazlası grup sohbeti olur)
+  function pickCharsSheet(sc, cb) {
+    if (!chars().length) { notify('Önce Oluştur sekmesinden bir karakter oluştur', '👥'); return; }
+    const sel = new Set();
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>👥 Kiminle oynayacaksın?</h3>
+      <div class="about" style="margin-bottom:10px">"${esc(sc.title)}" senaryosunda karakter yok; bu hikaye için seç.</div>
+      <div class="g-pick">${chars().map(c => `<button type="button" data-m="${c.id}">${avatar(c, 52)}<b>${esc(c.name)}</b></button>`).join('')}</div>
+      <button class="btn pink block" id="pcGo">▶️ Başlat</button>`, 'light');
+    sh.el.onclick = e => {
+      const b = e.target.closest('[data-m]');
+      if (b) { sel.has(b.dataset.m) ? sel.delete(b.dataset.m) : sel.add(b.dataset.m); b.classList.toggle('on', sel.has(b.dataset.m)); return; }
+      if (!e.target.closest('#pcGo')) return;
+      if (!sel.size) { notify('En az bir karakter seç', '👥'); return; }
+      sh.close();
+      cb(chars().filter(c => sel.has(c.id)).map(c => c.id));
+    };
+  }
+
+  // Hikaye kartları (Ana sayfa → 🎬 Monia)
+  function storyCard(s) {
+    const ths = scThreads(s), ms = scChars(s);
+    return `<div class="story-card card" data-sc="${s.id}">
+      <div class="st-cover"${s.cover ? ` style="background-image:url('${esc(s.cover)}')"` : ''}>${s.cover ? '' : `<span>${esc(scPlaceIcon(s))}</span>`}
+        ${ms.length ? `<div class="st-avas">${ms.slice(0, 3).map(c => avatar(c, 30)).join('')}</div>` : ''}</div>
+      <div class="st-body">
+        <b>${esc(s.title || 'Adsız senaryo')}</b>
+        ${s.desc ? `<p>${esc(s.desc)}</p>` : ''}
+        <div class="chips">${(s.tags || []).map(t => `<span class="chip">🏷️ ${esc(t)}</span>`).join('')}</div>
+        <small>${esc([scPlaceName(s) && `${scPlaceIcon(s)} ${scPlaceName(s)}`, timeLabel(s), `${s.events.length} olay`].filter(Boolean).join(' · '))}</small>
+        <div class="st-acts">
+          <button type="button" class="btn pink sm" data-st-play>▶️ ${ths.length ? 'Yeniden başlat' : 'Başlat'}</button>
+          ${ths.length ? `<button type="button" class="btn primary sm" data-st-cont>💬 Devam et${ths.length > 1 ? ` (${ths.length})` : ''}</button>` : ''}
+          <button type="button" class="btn ghost sm" data-st-edit>✏️</button>
+        </div>
+      </div></div>`;
+  }
+  function renderHomeMonia() {
+    const sorts = [['all', 'Tümü'], ['played', 'Son oynanan'], ['new', 'Yeni']];
+    const sort = ui.storySort || 'all', tag = ui.storyTag || '';
+    let list = MO().scenarios.filter(s => !tag || (s.tags || []).includes(tag));
+    if (sort === 'played') list = list.filter(scPlayed).sort((a, b) => scPlayed(b) - scPlayed(a));
+    if (sort === 'new') list = [...list].sort((a, b) => b.created - a.created);
+    const used = [...new Set(MO().scenarios.flatMap(s => s.tags || []))];
+    view.innerHTML = `
+      <div class="page-pad home">
+        ${homeSwitch()}
+        <div class="banners">
+          <button class="banner gold" id="hmRandom"><b>Senaryo üret</b><small>zaman + mekan + olaylar</small><span class="art">🎲</span></button>
+          <a class="banner green" href="#/monia"><b>Monia Paneli</b><small>${MO().scenarios.length} senaryo · ${allEvents().length} olay</small><span class="art">🎬</span></a>
+        </div>
+        <div class="tabs-row"><div class="tabs">${sorts.map(([k, t]) => `<button data-sort="${k}" class="${sort === k ? 'active' : ''}">${t}</button>`).join('')}</div></div>
+        ${used.length ? `<div class="chips mo-filter">${tagChips(used, tag ? [tag] : [], 'data-ftag')}</div>` : ''}
+        <div class="story-list">${list.length ? list.map(storyCard).join('')
+          : `<div class="empty"><span class="big">🎬</span>${MO().scenarios.length ? 'Bu filtrede hikaye yok' : 'Henüz hikaye yok.<br>🎲 ile bir senaryo üret ya da Monia Paneli\'nden kur.'}</div>`}</div>
+      </div>`;
+    bindHomeSwitch();
+    $('#hmRandom').onclick = () => addScenario(randomScenario());
+    view.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { ui.storySort = b.dataset.sort; renderHomeMonia(); });
+    view.querySelectorAll('[data-ftag]').forEach(b => b.onclick = () => { ui.storyTag = ui.storyTag === b.dataset.ftag ? '' : b.dataset.ftag; renderHomeMonia(); });
+    view.querySelectorAll('.story-card').forEach(card => card.onclick = e => {
+      const s = MO().scenarios.find(x => x.id === card.dataset.sc);
+      if (!s) return;
+      if (e.target.closest('[data-st-play]')) return startScenario(s);
+      if (e.target.closest('[data-st-cont]')) return continueStory(s);
+      location.hash = `#/monia/${s.id}`;
+    });
+  }
+  // bir senaryodan başlatılmış sohbete dön (birden çoksa seç)
+  function continueStory(s) {
+    const ths = scThreads(s);
+    if (ths.length === 1) { location.hash = `#/chat/${ths[0].id}`; return; }
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>💬 ${esc(s.title)}</h3>
+      ${ths.map(t => { const ms = membersOf(t), l = lastOf(t); return `<button class="act" data-th="${t.id}">${esc(ms.map(m => m.name).join(', '))} · ${esc(t.title)}<small> · ${(S().chats[t.id] || []).length} mesaj${l ? ' · ' + fmtTime(l.ts) : ''}</small></button>`; }).join('')}`, 'light');
+    sh.el.onclick = e => { const b = e.target.closest('[data-th]'); if (b) { sh.close(); location.hash = `#/chat/${b.dataset.th}`; } };
+  }
+  // Ana sayfanın menüsü: 💬 Yazışmalar (karakterler) | 🎬 Monia (hikayeler)
+  function homeMode(v) {
+    try { if (v) localStorage.setItem('amor-stories:home-mode', v); return localStorage.getItem('amor-stories:home-mode') || 'chat'; }
+    catch (e) { return v || ui.homeMode || 'chat'; }
+  }
+  const homeSwitch = () => { const m = homeMode(); return `<div class="home-switch">
+    <button type="button" data-hmode="chat" class="${m === 'chat' ? 'on' : ''}">💬 Yazışmalar</button>
+    <button type="button" data-hmode="monia" class="${m === 'monia' ? 'on' : ''}">🎬 Monia</button></div>`; };
+  function bindHomeSwitch() {
+    view.querySelectorAll('[data-hmode]').forEach(b => b.onclick = () => { ui.homeMode = b.dataset.hmode; homeMode(b.dataset.hmode); renderHome(); });
+  }
+
+  function renderMonia(id, extra) {
+    ['places', 'groups', 'events', 'scenarios'].forEach(k => { MO()[k] = MO()[k] || []; });
+    if (id === 'olay') return renderEventEditor(extra);
+    const sc = id && MO().scenarios.find(s => s.id === id);
+    if (id && !sc) { location.hash = '#/monia'; return; }
+    if (sc) return renderScenario(sc);
+    const usedTags = [...new Set(MO().scenarios.flatMap(s => s.tags || []))];
+    const list = MO().scenarios.filter(s => !ui.storyTag || (s.tags || []).includes(ui.storyTag));
+    view.innerHTML = `
+      <div class="page-pad narrow monia">
+        <div class="h-title">🎬 Monia Paneli</div>
+        <div class="banners">
+          <button class="banner gold" id="moRandom"><b>Senaryo üret</b><small>zaman + mekan + olaylar</small><span class="art">🎲</span></button>
+          <button class="banner green" id="moNew"><b>Boş senaryo</b><small>kendin kur</small><span class="art">✍️</span></button>
+        </div>
+        <div class="sec-title">Senaryolar <small>(${list.length})</small></div>
+        <div class="mo-ev-btns" style="margin-bottom:10px">
+          <button type="button" class="btn ghost sm" id="moExport"${MO().scenarios.length ? '' : ' disabled'}>📤 Dışa aktar (JSON)</button>
+          <button type="button" class="btn ghost sm" id="moImport">📥 İçe aktar</button>
+        </div>
+        ${usedTags.length ? `<div class="chips mo-filter">${tagChips(usedTags, ui.storyTag ? [ui.storyTag] : [], 'data-ftag')}</div>` : ''}
+        ${list.length ? `<div class="mo-list">${list.map(s => `<a class="card mo-sc" href="#/monia/${s.id}">
+            ${s.cover ? `<img class="mo-sc-cover" src="${esc(s.cover)}" alt="">` : `<div class="mo-sc-ic">${esc(scPlaceIcon(s))}</div>`}
+            <div class="mo-sc-body"><b>${esc(s.title || 'Adsız senaryo')}</b>
+              ${s.desc ? `<small class="mo-sc-desc">${esc(s.desc)}</small>` : ''}
+              <small>${esc([scPlaceName(s), timeLabel(s)].filter(Boolean).join(' · ') || 'Zaman / mekan yok')}</small>
+              <small>${s.events.length} olay${scChars(s).length ? ' · ' + esc(scChars(s).map(c => c.name).join(', ')) : ''}${(s.tags || []).length ? ' · 🏷️ ' + esc(s.tags.join(', ')) : ''}</small></div>
+            <div class="mo-sc-avas">${scChars(s).slice(0, 3).map(c => avatar(c, 34)).join('')}</div></a>`).join('')}</div>`
+          : '<div class="about card">Henüz senaryo yok. 🎲 ile rastgele üret ya da boş bir senaryo kur: zamanı, mekanı ve olayları seç, sonra ▶️ ile hikayeyi başlat. Olaylar sohbet ilerledikçe sırayla 📜 kart olarak gelir.</div>'}
+        <div class="sec-title">Olay havuzu <small>(${allEvents().length})</small></div>
+        <button class="btn ghost block" id="moEvNew">➕ Kalıp olay oluştur</button>
+        ${moCats().map(cat => { const evs = poolOf(cat); return evs.length || cat.id === 'mine' ? `
+          <div class="mo-cat"><div class="mo-cat-head">${cat.icon} ${esc(cat.label)} <small>${evs.length}</small></div>
+            <div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip${e.builtin ? '' : ' mine'}" data-ev="${esc(e.id)}" title="${esc(e.text || e.title)}">${esc(e.title)}</button>`).join('') || '<small class="mo-empty">Kendi kalıplarını ➕ ile ekle</small>'}</div></div>` : ''; }).join('')}
+      </div>`;
+    $('#moRandom').onclick = () => addScenario(randomScenario());
+    $('#moNew').onclick = () => addScenario({ id: Store.uid(), title: 'Yeni senaryo', chars: [], part: '', day: '', season: '', timeNote: '', place: '', placeName: '', placeIcon: '', events: [], created: Date.now() });
+    $('#moEvNew').onclick = () => { ui.moReturn = null; location.hash = '#/monia/olay/yeni'; };
+    $('#moExport').onclick = () => exportScenarios(list.length ? list : MO().scenarios);
+    $('#moImport').onclick = importScenarios;
+    view.querySelectorAll('[data-ftag]').forEach(b => b.onclick = () => { ui.storyTag = ui.storyTag === b.dataset.ftag ? '' : b.dataset.ftag; render(); });
+    view.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { ui.moReturn = null; location.hash = `#/monia/olay/${encodeURIComponent(b.dataset.ev)}`; });
+  }
+
+  // ✍️ Olay editörü (#/monia/olay/<id | yeni>): başlık, kategori, ton, anlatım, olay akışı, açılış repliği, yazar notu.
+  // Hazır bir olayı kaydedince detaylı hali onun yerine geçer (base); ui.moReturn = senaryo id -> kaydedince o senaryoya da eklenir.
+  function renderEventEditor(rawId) {
+    const id = rawId ? decodeURIComponent(rawId) : 'yeni';
+    const base = id === 'yeni' ? null : allEvents().find(e => e.id === id) || MO().events.find(e => e.id === id);
+    if (id !== 'yeni' && !base) { location.hash = '#/monia'; return; }
+    const mine = base && !base.builtin;
+    const back = ui.moReturn && MO().scenarios.some(s => s.id === ui.moReturn) ? `#/monia/${ui.moReturn}` : '#/monia';
+    const d = ui.evDraft && ui.evDraft.for === id ? ui.evDraft : (ui.evDraft = {
+      for: id, title: base ? base.title : '', cat: base ? base.cat || 'mine' : 'mine', text: base ? base.text || '' : '',
+      steps: base && base.steps ? [...base.steps] : [], opener: base ? base.opener || '' : '', starter: base ? base.starter || '' : '',
+      tones: base && base.tones ? [...base.tones] : [], note: base ? base.note || '' : '',
+      part: base ? base.part || '' : '', when: base ? base.when || '' : '', place: base ? base.place || '' : '' });
+    const draw = () => renderEventEditor(rawId);
+    const chip = (attr, val, label, on) => `<button type="button" class="chip mo-pick${on ? ' on' : ''}" ${attr}="${esc(val)}">${label}</button>`;
+    const preview = () => evText(d, null).replace(/\n/g, '<br>');
+    view.innerHTML = `
+      <div class="page-pad narrow monia">
+        <div class="mo-top"><a class="icon-btn" href="${back}" id="evBack" aria-label="Geri">${ICON.arrowLeft}</a>
+          <input id="evTitle" maxlength="50" value="${esc(d.title)}" placeholder="Olayın adı (ör. Sürpriz ziyaret)"></div>
+        ${base && base.builtin ? '<div class="about card">Hazır olay. Kaydedince detaylı hali havuzda bunun yerine geçer (istersen sonra hazır haline dönebilirsin).</div>' : ''}
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🗂️ Kategori</div>
+          <div class="chips">${moCats().map(c => chip('data-cat', c.id, `${c.icon} ${esc(c.label)}`, d.cat === c.id)).join('')}</div>
+          <div class="sec-title">🎭 Ton</div>
+          <div class="chips">${(MD.tones || []).map(t => chip('data-tone', t, esc(t), d.tones.includes(t))).join('')}</div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🕰️ Zaman ve 📍 Mekan <small>· isteğe bağlı; boşsa senaryonunki geçerli</small></div>
+          <div class="chips">${MD.parts.map(p => chip('data-epart', p.id, `${p.icon} ${esc(p.label)}`, d.part === p.id)).join('')}</div>
+          <div class="field"><input id="evWhen" maxlength="60" value="${esc(d.when)}" placeholder="Zaman notu (ör. ertesi sabah, iki saat sonra)"></div>
+          <div class="field"><select id="evPlace" class="mo-select"><option value="">📍 Senaryonun mekanı</option>
+            ${allGroups().map(g => { const ps = allPlaces().filter(p => inGroup(p, g)); return ps.length ? `<optgroup label="${esc(g.icon + ' ' + g.name)}">${ps.map(p => `<option value="${esc(p.id)}"${d.place === p.id ? ' selected' : ''}>${esc(p.icon + ' ' + p.name)}</option>`).join('')}</optgroup>` : ''; }).join('')}
+          </select></div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">📖 Olay</div>
+          <textarea class="mo-area" id="evText" rows="6" maxlength="2000" placeholder="Ne oluyor? Ortam, his, ayrıntılar… ör. {ben} haber vermeden kapıda beliriyor; elinde bir şişe şarap var, yüzü kızarmış.">${esc(d.text)}</textarea>
+          <div class="mo-vars">Değişkenler: <code>{ben}</code> karakter · <code>{sen}</code> sen · <code>{mekan}</code> · <code>{zaman}</code></div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🪜 Olay akışı <small>· adım adım ne olacak</small></div>
+          <div class="mo-steps">${d.steps.map((s, i) => `<div class="mo-step" data-si="${i}"><span class="n">${i + 1}</span>
+            <input data-step="${i}" maxlength="300" value="${esc(s)}" placeholder="ör. {sen} kapıyı açıyor">
+            ${i > 0 ? '<button type="button" data-sup aria-label="Yukarı">⬆️</button>' : ''}<button type="button" data-srm aria-label="Sil">✕</button></div>`).join('')}</div>
+          <button type="button" class="btn ghost sm" id="evStep">➕ Adım ekle</button>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">💬 Açılış</div>
+          <div class="chips">${[['ben', '👤 Karakter başlar'], ['sen', '🙋 Sen başlarsın'], ['', '📝 Anlatım']].map(([k, l]) => chip('data-starter', k, l, d.starter === k)).join('')}</div>
+          <div class="field"><input id="evOpener" maxlength="300" value="${esc(d.opener)}" placeholder="İlk replik (ör. kapıyı açacak mısın yoksa burada mı bekleyeyim?)"></div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🔒 Yazar notu <small>· sadece burada görünür</small></div>
+          <textarea class="mo-area" id="evNote" rows="3" maxlength="1000" placeholder="Kendine hatırlatma, fikirler…">${esc(d.note)}</textarea>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">👁️ Sohbette böyle görünecek</div>
+          <div class="scene-card sc-hint mo-prev"><div class="sc-ic">📜</div><div class="sc-body"><small>📜 Olay · ${esc(d.title || 'Adsız')}${evPlace(d) ? ` · ${esc(evPlace(d).icon + ' ' + evPlace(d).name)}` : ''}</small><span id="evPrev">${preview()}</span></div></div>
+        </div>
+
+        <button class="btn primary block" id="evSave" style="margin-top:6px">${mine ? 'Kaydet' : ui.moReturn ? 'Kaydet ve senaryoya ekle' : 'Havuza ekle'}</button>
+        ${mine && base.base ? '<button class="btn ghost block" id="evReset" style="margin-top:8px">↩️ Hazır haline dön</button>' : ''}
+        ${mine ? '<button class="btn ghost block" id="evDel" style="margin-top:8px;color:#ff2d55">🗑️ Olayı sil</button>' : ''}
+      </div>`;
+
+    const live = () => { const p = $('#evPrev'); if (p) p.innerHTML = preview(); };
+    const bindIn = (sel, k) => { $(sel).oninput = e => { d[k] = e.target.value; live(); }; };
+    bindIn('#evTitle', 'title'); bindIn('#evText', 'text'); bindIn('#evOpener', 'opener'); bindIn('#evNote', 'note'); bindIn('#evWhen', 'when');
+    $('#evPlace').onchange = e => { d.place = e.target.value; draw(); };
+    view.querySelectorAll('[data-step]').forEach(inp => inp.oninput = () => { d.steps[+inp.dataset.step] = inp.value; live(); });
+    $('#evBack').onclick = () => { ui.evDraft = null; };
+    view.onclick = e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const ds = b.dataset;
+      if (ds.cat) { d.cat = ds.cat; return draw(); }
+      if (ds.epart) { d.part = d.part === ds.epart ? '' : ds.epart; return draw(); }
+      if (ds.tone) { d.tones = d.tones.includes(ds.tone) ? d.tones.filter(t => t !== ds.tone) : [...d.tones, ds.tone]; return draw(); }
+      if ('starter' in ds) { d.starter = ds.starter; return draw(); }
+      if (b.id === 'evStep') { d.steps.push(''); draw(); const ins = view.querySelectorAll('[data-step]'); ins[ins.length - 1].focus(); return; }
+      const row = b.closest('[data-si]');
+      if (row) {
+        const i = +row.dataset.si;
+        if ('srm' in ds) d.steps.splice(i, 1);
+        if ('sup' in ds) [d.steps[i - 1], d.steps[i]] = [d.steps[i], d.steps[i - 1]];
+        return draw();
+      }
+    };
+    $('#evSave').onclick = () => {
+      const data = { title: d.title.trim(), cat: d.cat, text: d.text.trim(), steps: d.steps.map(s => s.trim()).filter(Boolean),
+        opener: d.opener.trim(), starter: d.starter, tones: d.tones, note: d.note.trim(), part: d.part, when: d.when.trim(), place: d.place };
+      if (!data.title && !data.text) { notify('Bir başlık ya da olay yaz', '✍️'); return; }
+      data.title = data.title || data.text.replace(/\{\w+\}/g, '').trim().slice(0, 30);
+      let saved;
+      if (mine) saved = Object.assign(MO().events.find(x => x.id === base.id), data);
+      else {
+        saved = { id: Store.uid(), ...data };
+        if (base && base.builtin) saved.base = base.id;
+        MO().events.push(saved);
+      }
+      const sc = ui.moReturn && MO().scenarios.find(s => s.id === ui.moReturn);
+      if (sc && !mine) sc.events.push(evCopy(saved));
+      save();
+      ui.evDraft = null;
+      notify(sc && !mine ? 'Olay kaydedildi ve senaryoya eklendi' : 'Olay kaydedildi', '🎬');
+      location.hash = sc ? `#/monia/${sc.id}` : '#/monia';
+    };
+    const del = $('#evDel'), reset = $('#evReset');
+    const remove = msg => () => {
+      if (!confirm(msg)) return;
+      MO().events = MO().events.filter(x => x.id !== base.id);
+      save(); ui.evDraft = null; location.hash = back;
+    };
+    if (del) del.onclick = remove('Bu olay silinsin mi? (Senaryolardaki kopyaları kalır)');
+    if (reset) reset.onclick = remove('Detaylı hali silinip hazır olay geri gelsin mi?');
+  }
+
+  // Zaman / Mekan panellerinin açık-kapalı hali: { time: kapalı mı, place: kapalı mı }
+  function moFold(v) {
+    try {
+      if (v) localStorage.setItem('amor-stories:monia-fold', JSON.stringify(v));
+      return JSON.parse(localStorage.getItem('amor-stories:monia-fold')) || {};
+    } catch (e) { return v || {}; }
+  }
+
+  // Mekan ekle / düzenle: ad, simge, etiketler (Evde, Dışarıda… ya da kendi etiketin), ipuçları
+  function placeEditSheet(p, done) {
+    const tags = new Set(p ? p.tags || [] : []);
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>${p ? '✏️ Mekanı düzenle' : '➕ Mekan ekle'}</h3>
+      <form id="plForm" autocomplete="off">
+        <div class="pl-own"><input id="peIcon" maxlength="4" placeholder="📍" value="${esc(p ? p.icon : '')}"><input id="peName" maxlength="40" placeholder="Mekanın adı (ör. Ofiste, Spor salonunda)" value="${esc(p ? p.name : '')}"></div>
+        <div class="sec-title">🏷️ Etiketler</div>
+        <div class="chips" id="peTags">${allGroups().map(g => `<button type="button" class="chip mo-pick${tags.has(g.id) ? ' on' : ''}" data-tag="${g.id}">${g.icon} ${esc(g.name)}</button>`).join('')}</div>
+        <div class="pl-own" style="margin-top:8px"><input id="ptIcon" maxlength="4" placeholder="🏷️"><input id="ptName" maxlength="24" placeholder="Yeni etiket (ör. İş yerinde)"><button type="button" class="btn ghost sm" id="ptAdd">Ekle</button></div>
+        <div class="sec-title">💡 İpuçları <small>· her satır bir ipucu, {o} = onun adı (isteğe bağlı)</small></div>
+        <div class="field" style="margin-top:0"><textarea id="peHints" rows="4" maxlength="2000" placeholder="{o} masasında dosyalara gömülmüş, seni görünce gülümsüyor.">${esc(p ? (p.hints || []).join('\n') : '')}</textarea></div>
+        <button class="btn primary block" type="submit" style="margin-top:12px">${p ? 'Kaydet' : 'Mekanı ekle'}</button>
+        ${p ? '<button class="btn ghost block" type="button" id="peDel" style="margin-top:8px;color:#ff2d55">🗑️ Mekanı sil</button>' : ''}
+      </form>`, 'light');
+    const el = sh.el;
+    el.querySelector('#peTags').onclick = e => {
+      const b = e.target.closest('[data-tag]');
+      if (!b) return;
+      tags.has(b.dataset.tag) ? tags.delete(b.dataset.tag) : tags.add(b.dataset.tag);
+      b.classList.toggle('on', tags.has(b.dataset.tag));
+    };
+    el.querySelector('#ptAdd').onclick = () => {
+      const name = el.querySelector('#ptName').value.trim();
+      if (!name) return;
+      let g = allGroups().find(x => x.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'));
+      if (!g) { g = { id: 't:' + Store.uid(), icon: el.querySelector('#ptIcon').value.trim() || '🏷️', name }; MO().groups.push(g); save(); }
+      tags.add(g.id);
+      el.querySelector('#peTags').insertAdjacentHTML('beforeend', el.querySelector(`[data-tag="${g.id}"]`) ? '' : `<button type="button" class="chip mo-pick on" data-tag="${g.id}">${esc(g.icon)} ${esc(g.name)}</button>`);
+      el.querySelector(`[data-tag="${g.id}"]`).classList.add('on');
+      el.querySelector('#ptName').value = ''; el.querySelector('#ptIcon').value = '';
+    };
+    el.querySelector('#plForm').onsubmit = e => {
+      e.preventDefault();
+      const name = el.querySelector('#peName').value.trim();
+      if (!name) { notify('Mekana bir ad ver', '📍'); return; }
+      if (!tags.size) { notify('En az bir etiket seç (Evde, Dışarıda…)', '🏷️'); return; }
+      const hints = el.querySelector('#peHints').value.split('\n').map(s => s.trim()).filter(Boolean);
+      const data = { icon: el.querySelector('#peIcon').value.trim() || '📍', name, tags: [...tags],
+        hints: hints.length ? hints : [`${name}, {o} ile baş başasınız.`] };
+      let saved;
+      if (p) saved = Object.assign(MO().places.find(x => x.id === p.id), data);
+      else { saved = { id: 'u:' + Store.uid(), ...data }; MO().places.push(saved); }
+      save(); sh.close();
+      notify(p ? 'Mekan kaydedildi' : 'Mekan eklendi', '📍');
+      done(saved);
+    };
+    const del = el.querySelector('#peDel');
+    if (del) del.onclick = () => {
+      if (!confirm(`"${p.name}" silinsin mi? (Başlattığın sohbetlerdeki kartlar kalır)`)) return;
+      MO().places = MO().places.filter(x => x.id !== p.id);
+      save(); sh.close(); done(null);
+    };
+  }
+
+  function renderScenario(sc) {
+    const draw = () => renderScenario(sc);
+    const autoTitle = () => `${scPlaceIcon(sc)} ${scPlaceName(sc)}`;
+    // ad hâlâ mekandan geliyorsa mekanla birlikte değişir
+    const set = patch => { const auto = sc.title === autoTitle(); Object.assign(sc, patch); if (auto && scPlaceName(sc)) sc.title = autoTitle(); save(); draw(); };
+    const chip = (attr, val, label, on) => `<button type="button" class="chip mo-pick${on ? ' on' : ''}" ${attr}="${esc(val)}">${label}</button>`;
+    // Zaman / Mekan panelleri açılıp kapanır (tercih bu cihazda hatırlanır)
+    const fold = moFold();
+    const foldHead = (k, title, sum) => `<button type="button" class="mo-fold${fold[k] ? ' closed' : ''}" data-fold="${k}">
+      <span class="sec-title">${title}</span><small>${esc(sum)}</small><i>${fold[k] ? '▸' : '▾'}</i></button>`;
+    view.innerHTML = `
+      <div class="page-pad narrow monia">
+        <div class="mo-top"><a class="icon-btn" href="#/monia" aria-label="Geri">${ICON.arrowLeft}</a>
+          <input id="scTitle" maxlength="50" value="${esc(sc.title)}" placeholder="Senaryo adı"></div>
+
+        <div class="mo-cover${sc.cover ? '' : ' empty'}"${sc.cover ? ` style="background-image:url('${esc(sc.cover)}')"` : ''}>
+          <button type="button" class="btn ghost sm" id="scCover">🖼️ ${sc.cover ? 'Kapağı değiştir' : 'Kapak ekle'}</button>
+          ${sc.cover ? '<button type="button" class="btn ghost sm" id="scCoverRm">✕</button>' : ''}
+        </div>
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">📝 Açıklama</div>
+          <textarea class="mo-area" id="scDesc" rows="3" maxlength="1000" placeholder="Bu hikaye ne anlatıyor? (sohbetin başında senaryo notunda da görünür)">${esc(sc.desc || '')}</textarea>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🏷️ Etiketler</div>
+          <div class="chips">${tagChips(allScTags(), sc.tags || [])}</div>
+          <div class="pl-own" style="margin-top:8px"><input id="scTagIn" maxlength="24" placeholder="Yeni etiket (ör. Yaz tatili)"><button type="button" class="btn ghost sm" id="scTagAdd">Ekle</button></div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">👥 Karakterler <small>· isteğe bağlı; seçmezsen başlatırken sorulur</small></div>
+          ${chars().length ? `<div class="g-pick">${chars().map(c => `<button type="button" data-ch="${c.id}" class="${sc.chars.includes(c.id) ? 'on' : ''}">${avatar(c, 46)}<b>${esc(c.name)}</b></button>`).join('')}</div>`
+            : '<div class="about">Önce <a href="#/create"><b>Oluştur</b></a> sekmesinden bir karakter oluştur.</div>'}
+        </div>
+
+        <div class="card">
+          ${foldHead('time', '🕰️ Zaman', timeLabel(sc) || 'seçilmedi')}
+          <div class="mo-fold-body"${fold.time ? ' hidden' : ''}>
+          <div class="chips">${MD.parts.map(p => chip('data-part', p.id, `${p.icon} ${esc(p.label)}`, sc.part === p.id)).join('')}</div>
+          <div class="chips">${MD.days.map(d => chip('data-day', d, esc(d), sc.day === d)).join('')}</div>
+          <div class="chips">${MD.seasons.map(d => chip('data-season', d, esc(d), sc.season === d)).join('')}</div>
+          <div class="field"><input id="scTime" maxlength="60" value="${esc(sc.timeNote || '')}" placeholder="Ek zaman notu (ör. 3 yıl sonra, ilk buluşmadan bir hafta önce)"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          ${foldHead('place', '📍 Mekan', scPlaceName(sc) ? `${scPlaceIcon(sc)} ${scPlaceName(sc)}` : 'seçilmedi')}
+          <div class="mo-fold-body"${fold.place ? ' hidden' : ''}>
+          <div class="mo-ev-btns"><button type="button" class="btn ghost sm" id="scPlRoll">🎲 Rastgele mekan</button><button type="button" class="btn ghost sm" id="scPlAdd">➕ Mekan ekle</button></div>
+          ${allGroups().map(g => { const ps = allPlaces().filter(p => inGroup(p, g)); return ps.length ? `<div class="mo-sub">${g.icon} ${esc(g.name)}</div>
+            <div class="pl-grid">${ps.map(p => `<button type="button" data-pl="${p.id}" class="${p.id === sc.place && !sc.placeName ? 'on' : ''}${p.id.startsWith('u:') ? ' mine' : ''}"><span>${p.icon}</span><small>${esc(p.name)}</small></button>`).join('')}</div>` : ''; }).join('')}
+          ${MO().places.length ? '<div class="mo-vars">Eklediğin bir mekanı düzenlemek için seçiliyken bir kez daha dokun.</div>' : ''}
+          <div class="pl-own" style="margin-top:10px"><input id="scPlIcon" maxlength="4" placeholder="📍" value="${esc(sc.placeIcon || '')}"><input id="scPlName" maxlength="40" placeholder="Sadece bu senaryoya özel mekan (kaydedilmez)" value="${esc(sc.placeName || '')}"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">📜 Olaylar <small>(${sc.events.length}) · sohbette sırayla gelir</small></div>
+          <div class="mo-evs">${sc.events.map((e, i) => `<div class="mo-ev" data-i="${i}">
+              <span class="n">${i + 1}</span><span class="t">${evPlace(e) ? `<em class="mo-tag">${esc(evPlace(e).icon + ' ' + evPlace(e).name)}</em>` : ''}${esc(evText(e, sc))}</span>
+              <span class="a">${i > 0 ? '<button type="button" data-up aria-label="Yukarı">⬆️</button>' : ''}${i < sc.events.length - 1 ? '<button type="button" data-down aria-label="Aşağı">⬇️</button>' : ''}<button type="button" data-edit aria-label="Düzenle">✏️</button><button type="button" data-rm aria-label="Kaldır">✕</button></span></div>`).join('')
+            || '<div class="about">Henüz olay yok. Havuzdan seç, kendin yaz ya da rastgele ekle.</div>'}</div>
+          <div class="mo-ev-btns">
+            <button type="button" class="btn ghost sm" id="scPool">➕ Havuzdan</button>
+            <button type="button" class="btn ghost sm" id="scWrite">✍️ Kendin yaz</button>
+            <button type="button" class="btn ghost sm" id="scRand">🎲 Rastgele</button>
+          </div>
+        </div>
+
+        <button class="btn pink block" id="scStart" style="margin-top:14px">▶️ Hikayeyi başlat</button>
+        <div class="mo-ev-btns" style="margin-top:8px">
+          <button class="btn ghost sm" id="scReroll">🎲 Hepsini yeniden üret</button>
+          <button class="btn ghost sm" id="scCopy">📄 Kopyasını al</button>
+          <button class="btn ghost sm" id="scExport">📤 Dışa aktar</button>
+          <button class="btn ghost sm" id="scDel" style="color:#ff2d55">🗑️ Sil</button>
+        </div>
+      </div>`;
+
+    $('#scTitle').onchange = e => { sc.title = e.target.value.trim() || 'Adsız senaryo'; save(); };
+    $('#scDesc').onchange = e => { sc.desc = e.target.value.trim(); save(); };
+    $('#scExport').onclick = () => exportScenarios([sc]);
+    const addTag = () => {
+      const v = $('#scTagIn').value.trim();
+      if (!v) return;
+      const t = allScTags().find(x => x.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr')) || v;
+      set({ tags: [...new Set([...(sc.tags || []), t])] });
+    };
+    $('#scTagAdd').onclick = addTag;
+    $('#scTagIn').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } };
+    if ($('#scCoverRm')) $('#scCoverRm').onclick = () => set({ cover: '' });
+    // kapak: seçili karakterlerin (yoksa tüm karakterlerin) fotoğraflarından ya da cihazdan
+    $('#scCover').onclick = () => {
+      const from = scChars(sc).length ? scChars(sc) : chars();
+      const pics = [...new Set(from.flatMap(c => [c.photo, ...(c.album || [])]).filter(Boolean))];
+      const sh = sheet(`
+        <div class="sheet-grip"></div>
+        <h3>🖼️ Senaryo kapağı</h3>
+        <label class="btn ghost block photo-up">📁 Cihazdan seç<input type="file" accept="image/*" id="cvFile" hidden></label>
+        ${pics.length ? `<div class="sec-title">${scChars(sc).length ? 'Karakterlerin fotoğrafları' : 'Tüm karakterler'}</div>
+          <div class="pick-photos">${pics.map((s, i) => `<button type="button" data-cv="${i}"><img src="${esc(s)}" alt="" loading="lazy"></button>`).join('')}</div>`
+          : '<div class="about">Karakterlerin fotoğrafı yok; cihazından seçebilirsin.</div>'}`, 'light');
+      sh.el.onclick = e => { const b = e.target.closest('[data-cv]'); if (b) { sh.close(); set({ cover: pics[+b.dataset.cv] }); } };
+      sh.el.querySelector('#cvFile').onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        try { const src = await readPhoto(f, 900); sh.close(); set({ cover: src }); } catch (err) { notify('Fotoğraf okunamadı', '⚠️'); }
+      };
+    };
+    $('#scTime').onchange = e => { sc.timeNote = e.target.value.trim(); save(); draw(); };
+    $('#scPlName').onchange = e => set({ placeName: e.target.value.trim() });
+    $('#scPlIcon').onchange = e => set({ placeIcon: e.target.value.trim() });
+    $('#scPlRoll').onclick = () => set({ place: pickOne(allPlaces().filter(p => p.id !== sc.place)).id, placeName: '', placeIcon: '' });
+    $('#scPlAdd').onclick = () => placeEditSheet(null, p => set({ place: p.id, placeName: '', placeIcon: '' }));
+    view.onclick = e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const d = b.dataset;
+      if (d.fold) { fold[d.fold] = !fold[d.fold]; moFold(fold); return draw(); }
+      if (d.stag) { const tg = sc.tags || []; return set({ tags: tg.includes(d.stag) ? tg.filter(x => x !== d.stag) : [...tg, d.stag] }); }
+      if (d.pl && d.pl === sc.place && !sc.placeName && d.pl.startsWith('u:')) {
+        return placeEditSheet(MO().places.find(p => p.id === d.pl), p => set(p ? { place: p.id } : { place: '' }));
+      }
+      if (d.ch) { const has = sc.chars.includes(d.ch); set({ chars: has ? sc.chars.filter(x => x !== d.ch) : [...sc.chars, d.ch] }); return; }
+      if (d.part) return set({ part: sc.part === d.part ? '' : d.part });
+      if (d.day) return set({ day: sc.day === d.day ? '' : d.day });
+      if (d.season) return set({ season: sc.season === d.season ? '' : d.season });
+      if (d.pl) return set({ place: d.pl, placeName: '', placeIcon: '' });
+      const row = b.closest('[data-i]');
+      if (row) {
+        const i = +row.dataset.i, ev = sc.events[i];
+        if ('up' in d || 'down' in d) { const j = 'up' in d ? i - 1 : i + 1; [sc.events[i], sc.events[j]] = [sc.events[j], sc.events[i]]; save(); draw(); }
+        if ('rm' in d) { sc.events.splice(i, 1); save(); draw(); }
+        if ('edit' in d) writeEvent(ev);
+      }
+    };
+    // tek seferlik olay yaz / düzenle (kalıp olarak da kaydedilebilir)
+    function writeEvent(ev) {
+      const sh = sheet(`
+        <div class="sheet-grip"></div>
+        <h3>${ev ? '✏️ Olayı düzenle' : '✍️ Olay yaz'}</h3>
+        <form id="wForm" autocomplete="off">
+          <div class="field" style="margin-top:0"><textarea id="wText" rows="3" maxlength="400" placeholder="{ben} sana bir sır veriyor…">${esc(ev ? ev.text || ev.title : '')}</textarea></div>
+          <div class="mo-vars">Değişkenler: <code>{ben}</code> · <code>{sen}</code> · <code>{mekan}</code> · <code>{zaman}</code></div>
+          <div class="field"><label>🕰️ Zaman</label><select id="wPart"><option value="">Senaryonun zamanı</option>
+            ${MD.parts.map(p => `<option value="${p.id}"${ev && ev.part === p.id ? ' selected' : ''}>${p.icon} ${esc(p.label)}</option>`).join('')}</select></div>
+          <div class="field"><input id="wWhen" maxlength="60" value="${esc(ev ? ev.when || '' : '')}" placeholder="Zaman notu (ör. ertesi sabah)"></div>
+          <div class="field"><label>📍 Mekan</label><select id="wPlace"><option value="">Senaryonun mekanı</option>
+            ${allGroups().map(g => { const ps = allPlaces().filter(p => inGroup(p, g)); return ps.length ? `<optgroup label="${esc(g.icon + ' ' + g.name)}">${ps.map(p => `<option value="${esc(p.id)}"${ev && ev.place === p.id ? ' selected' : ''}>${esc(p.icon + ' ' + p.name)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select></div>
+          <div class="field"><label>Havuza da ekle</label><select id="wKeep"><option value="">Hayır, sadece bu senaryoda</option>
+            ${moCats().map(c => `<option value="${c.id}">${c.icon} ${esc(c.label)} kategorisine</option>`).join('')}</select></div>
+          <button class="btn primary block" type="submit" style="margin-top:12px">Kaydet</button>
+          ${ev ? '' : '<button class="btn ghost block" type="button" id="wFull" style="margin-top:8px">📝 Detaylı editörde yaz</button>'}
+        </form>`, 'light');
+      setTimeout(() => sh.el.querySelector('#wText').focus(), 250);
+      const full = sh.el.querySelector('#wFull');
+      if (full) full.onclick = () => {
+        sh.close();
+        ui.moReturn = sc.id;
+        ui.evDraft = { for: 'yeni', title: '', cat: 'mine', text: sh.el.querySelector('#wText').value, steps: [], opener: '', starter: '', tones: [], note: '',
+          part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value, place: sh.el.querySelector('#wPlace').value };
+        location.hash = '#/monia/olay/yeni';
+      };
+      sh.el.querySelector('#wForm').onsubmit = e => {
+        e.preventDefault();
+        const text = sh.el.querySelector('#wText').value.trim();
+        if (!text) return;
+        const title = text.replace(/\{\w+\}/g, '').trim().slice(0, 30) || 'Olay';
+        const keep = sh.el.querySelector('#wKeep').value;
+        const wt = { part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value.trim(), place: sh.el.querySelector('#wPlace').value };
+        if (ev) Object.assign(ev, { text, title: ev.title && ev.text ? ev.title : title }, wt);
+        else sc.events.push({ id: Store.uid(), title, text, cat: keep || 'mine', ...wt });
+        if (keep) MO().events.push({ ...evCopy(ev || { title, text, ...wt }), cat: keep });
+        save(); sh.close(); draw();
+      };
+    }
+    // havuzdan çoklu seçim
+    $('#scPool').onclick = () => {
+      const sel = new Set();
+      const sh = sheet(`
+        <div class="sheet-grip"></div>
+        <h3>➕ Havuzdan olay ekle</h3>
+        ${moCats().map(cat => { const evs = poolOf(cat); return evs.length ? `<div class="mo-sub">${cat.icon} ${esc(cat.label)}</div>
+          <div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip" data-pick="${esc(e.id)}" title="${esc(e.text || '')}">${esc(e.title)}</button>`).join('')}</div>` : ''; }).join('')}
+        <button class="btn primary block" id="poolAdd" style="margin-top:14px">Ekle</button>`, 'light');
+      const btn = sh.el.querySelector('#poolAdd');
+      sh.el.onclick = e => {
+        const b = e.target.closest('[data-pick]');
+        if (b) { sel.has(b.dataset.pick) ? sel.delete(b.dataset.pick) : sel.add(b.dataset.pick); b.classList.toggle('on'); btn.textContent = sel.size ? `Ekle (${sel.size})` : 'Ekle'; return; }
+        if (e.target.closest('#poolAdd')) {
+          const pool = allEvents();
+          [...sel].forEach(id => { const ev = pool.find(x => x.id === id); if (ev) sc.events.push(evCopy(ev)); });
+          save(); sh.close(); draw();
+        }
+      };
+    };
+    $('#scWrite').onclick = () => writeEvent(null);
+    $('#scRand').onclick = () => {
+      const pool = allEvents().filter(e => !sc.events.some(x => x.title === e.title));
+      if (!pool.length) { notify('Havuzda eklenmemiş olay kalmadı', '🎲'); return; }
+      sc.events.push(evCopy(pickOne(pool))); save(); draw();
+    };
+    $('#scReroll').onclick = () => {
+      const r = randomScenario();
+      set({ part: r.part, day: r.day, season: r.season, place: r.place, placeName: '', placeIcon: '', events: r.events, chars: sc.chars.length ? sc.chars : r.chars });
+    };
+    $('#scCopy').onclick = () => addScenario({ ...JSON.parse(JSON.stringify(sc)), id: Store.uid(), title: sc.title + ' (kopya)', created: Date.now() });
+    $('#scDel').onclick = () => {
+      if (!confirm('Bu senaryo silinsin mi? (Başlattığın sohbetler kalır)')) return;
+      MO().scenarios = MO().scenarios.filter(s => s.id !== sc.id);
+      save(); location.hash = '#/monia';
+    };
+    $('#scStart').onclick = () => startScenario(sc);
+  }
+
+  // Hikayeyi başlat: yeni sohbet + mekan/zaman kartı + senaryo notu; olaylar sohbette sırayla 📜 kart olur
+  function startScenario(sc0, chosen) {
+    // karakter seçilmemişse şimdi sorulur (senaryoya kaydedilmez)
+    if (!chosen && !scChars(sc0).length) { pickCharsSheet(sc0, ids => startScenario(sc0, ids)); return; }
+    const sc = chosen ? { ...sc0, chars: chosen } : sc0;
+    const ms = scChars(sc);
+    let t;
+    if (ms.length === 1) t = newThread(ms[0], sc.title);
+    else { t = { id: Store.uid(), group: true, members: ms.map(m => m.id), title: sc.title, created: Date.now(), opened: 0 }; threads().push(t); }
+    const pl = placeOfSc(sc), first = ms[0].name.split(' ')[0];
+    const hint = pl && !sc.placeName ? pickOne(pl.hints).replace(/\{o\}/g, first) : '';
+    const now = Date.now(), list = msgsOf(t), tl = timeLabel(sc);
+    if (pl || sc.placeName) list.push({ id: Store.uid(), from: 'sys', ts: now, text: [tl, hint].filter(Boolean).join(' · '),
+      scene: { place: sc.placeName ? '' : sc.place, icon: scPlaceIcon(sc), name: scPlaceName(sc), hint } });
+    else if (tl) list.push({ id: Store.uid(), from: 'sys', ts: now, text: `🕰️ ${tl}` });
+    const evs = sc.events.map(e => { const p = evPlace(e); return p ? { text: evText(e, sc), place: p.id, icon: p.icon, name: p.name } : { text: evText(e, sc) }; });
+    const plan = sc.events.map((e, i) => `${i + 1}) ${evText(e, sc, true)}`).join('  ');
+    if (evs.length || sc.desc) list.push({ id: Store.uid(), from: 'sys', ts: now + 1,
+      text: `🎬 ${sc.title}${sc.desc ? `\n${sc.desc}` : ''}${evs.length ? `\n📜 ${plan}` : ''}` });
+    t.scenario = { id: sc.id, events: evs, i: 0 };
+    save();
+    location.hash = `#/chat/${t.id}`;
+  }
+
   function renderMe() {
     const u = S().user;
     const chatsCount = threads().length;
