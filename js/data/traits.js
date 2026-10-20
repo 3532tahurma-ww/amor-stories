@@ -24,7 +24,23 @@ Stories.Traits = (() => {
       // Başlığı değiştirmek için label'ı düzenle. Aynı şekilde yeni gruplar da ekleyebilirsin (id'leri farklı olsun).
       id: 'extra', label: '🌟 Ekstra özellikler',
       items: ['Vaginal','Anal','Oral Sex','Deepthroat','Cunnilingus','Paizuri','Titfuck','Footjob','Handjob','Buttjob','Blowjob','Huge Dick','Belly Bulge','Masturbation','Sex toys','Lactation','Creampie','Cumshot','Squirt','Cumflation','Female domination','Facesitting','Pregnant','Exhibitionism','Voyeurism','Iseme','Tutma' , 'Virginity','Cowgirl','Missionary','Ondesk','Anal','Doggy','Full Nelson','Public','BDSM','69']
-    }
+    },
+    {
+      id: 'extra', label: ' 🌸 Pussy Size',
+      items: ['Extremely Tight','Very Tight','Tight','Average','Relaxed','Loose','Very Loose']
+    },
+    {
+      id: 'extra', label: ' 🍑 Anal Size',
+      items: ['Extremely Tight','Very Tight','Tight','Average','Relaxed','Loose','Very Loose']
+    },
+    {
+      id: 'extra', label: ' 🍒 Boob Size',
+      items: ['70','75','80','85','90','95']
+    },
+    {
+      id: 'extra', label: ' 🍑 Butt Size',
+      items: ['XS','S','M','M/L','L','XL']
+    },
   ];
 
   const zodiacs = ['Koç', 'Boğa', 'İkizler', 'Yengeç', 'Aslan', 'Başak', 'Terazi', 'Akrep', 'Yay', 'Oğlak', 'Kova', 'Balık'];

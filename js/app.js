@@ -271,17 +271,31 @@
   }
 
   // js/data/system.js'teki hazırlar bu cihaza eklenir (bir kez)
+  // Dosyada sonradan değişen bir kayıt (ör. olaya renk / emoji verildi) bu cihazda da güncellenir; ama burada
+  // kendin değiştirdiysen seninki kalır. S().sysVer: kayıt -> en son dosyadan gelen halinin özeti.
+  const sysHash = x => { const s = JSON.stringify(x); let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return String(h >>> 0); };
   function adoptSystem() {
     const SYS = Stories.SYSTEM || {};
-    const seen = S().sysSeen = S().sysSeen || [];
+    const seen = S().sysSeen = S().sysSeen || [];   // eski sürüm: sadece "eklendi" bilgisi (özet yok)
+    const ver = S().sysVer = S().sysVer || {};
     const mo = S().monia = S().monia || {};
     let changed = false;
     ['cats', 'events', 'places', 'groups', 'scenarios', 'characters'].forEach(k => {
       const target = k === 'characters' ? S().characters : (mo[k] = mo[k] || []);
       (SYS[k] || []).forEach(x => {
-        if (!x || !x.id || seen.includes(`${k}:${x.id}`)) return;
-        seen.push(`${k}:${x.id}`);
-        if (!target.some(y => y.id === x.id || moKey(k, y) === moKey(k, x))) target.push(JSON.parse(JSON.stringify(x)));
+        if (!x || !x.id) return;
+        const key = `${k}:${x.id}`, h = sysHash(x), before = ver[key];
+        if (before === h) return;                        // dosyadaki hali değişmemiş
+        const known = before != null || seen.includes(key);
+        const i = target.findIndex(y => y.id === x.id);
+        if (!known) {
+          if (i < 0 && !target.some(y => moKey(k, y) === moKey(k, x))) target.push(JSON.parse(JSON.stringify(x)));
+          seen.push(key);
+        } else if (i >= 0 && (before == null || sysHash(target[i]) === before)) {
+          // dosyadaki hali yenilenmiş, burada elle değiştirilmemiş: güncelle (burada sildiysen geri gelmez)
+          target[i] = JSON.parse(JSON.stringify(x));
+        }
+        ver[key] = h;
         changed = true;
       });
     });
@@ -3122,10 +3136,17 @@
     const live = () => { const p = $('#evPrev'); if (p) p.innerHTML = preview(); };
     const bindIn = (sel, k) => { $(sel).oninput = e => { d[k] = e.target.value; live(); }; };
     bindIn('#evDesc', 'desc');
-    // sadece emojiler kalır, en fazla iki
-    $('#evEmo').onchange = e => { d.emojis = twoEmojis(e.target.value); draw(); };
-    $('#evColor').oninput = e => { d.color = e.target.value; };
-    $('#evColor').onchange = e => { d.color = e.target.value; draw(); };
+    // sadece emojiler kalır, en fazla iki. Sayfayı yeniden çizmeden günceller (yoksa hemen ardından Kaydet'e basınca tıklama kaçıyordu)
+    const look = () => {
+      const s = $('.ev-sample'), p = $('.mo-prev');
+      [s, p].forEach(el => { el.classList.toggle('has-color', isHex(d.color)); el.style.setProperty('--evc', isHex(d.color) ? d.color : ''); });
+      s.textContent = `${d.emojis ? d.emojis + ' ' : ''}${d.title || 'Olay'}`;
+      p.querySelector('.sc-ic').textContent = d.emojis || '📜';
+    };
+    $('#evEmo').oninput = e => { d.emojis = twoEmojis(e.target.value); look(); };
+    $('#evEmo').onchange = e => { e.target.value = d.emojis; };
+    $('#evColor').oninput = e => { d.color = e.target.value; look(); };
+    $('#evColor').onchange = e => { d.color = e.target.value; look(); view.querySelectorAll('.ev-sw').forEach(b => b.classList.toggle('on', b.classList.contains('ev-custom'))); };
     $('#evCats').onclick = () => catSheet(draw);
     bindIn('#evTitle', 'title'); bindIn('#evText', 'text'); bindIn('#evOpener', 'opener'); bindIn('#evNote', 'note'); bindIn('#evWhen', 'when');
     $('#evPlace').onchange = e => { d.place = e.target.value; draw(); };
