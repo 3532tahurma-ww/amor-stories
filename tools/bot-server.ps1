@@ -4,10 +4,14 @@
 # Only reachable from this computer. Close the window (or Ctrl+C) to stop.
 # (ASCII only, for Windows PowerShell 5.1.)
 
-param([switch]$NoBrowser)
+# Also used by yerel-duzenleme.bat (-Open app): the app's "system save" setting writes your additions
+# (Monia events, places, tags, scenarios) into js/data/system.js through /api/system.
+
+param([switch]$NoBrowser, [string]$Open = 'editor')
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $dataFile = Join-Path $root 'js\data\bot-rules.js'
+$systemFile = Join-Path $root 'js\data\system.js'
 $swFile = Join-Path $root 'sw.js'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
@@ -59,6 +63,28 @@ function SaveRules($ctx) {
   SendJson $ctx 200 ('{"ok":true,"changed":true,"sw":"' + $ver + '"}')
 }
 
+function ReadSystem {
+  if (-not (Test-Path $systemFile)) { return '{}' }
+  $txt = [IO.File]::ReadAllText($systemFile, $utf8)
+  $m = [regex]::Match($txt, '(?s)Stories\.SYSTEM\s*=\s*(.*?);\s*$')
+  if ($m.Success) { return $m.Groups[1].Value }
+  return '{}'
+}
+
+function SaveSystem($ctx) {
+  $reader = New-Object IO.StreamReader($ctx.Request.InputStream, $utf8)
+  $body = $reader.ReadToEnd()
+  $reader.Close()
+  try { $obj = $body | ConvertFrom-Json } catch { SendJson $ctx 400 '{"ok":false,"error":"invalid JSON"}'; return }
+  if ($null -eq $obj) { SendJson $ctx 400 '{"ok":false,"error":"empty"}'; return }
+  if ((ReadSystem).Trim() -eq $body.Trim()) { SendJson $ctx 200 '{"ok":true,"changed":false}'; return }
+  $content = "/* Uygulamada 'Sistem kaydi' acikken (yerel-duzenleme.bat) eklediklerin buraya yazilir; herkes icin hazir gelir. Elle duzenleme. */`nwindow.Stories = window.Stories || {};`nStories.SYSTEM = $body;`n"
+  [IO.File]::WriteAllText($systemFile, $content, $utf8)
+  $ver = BumpSw
+  Write-Host ("  system saved  " + (Get-Date -Format 'HH:mm:ss') + "  (sw: $ver)") -ForegroundColor Green
+  SendJson $ctx 200 ('{"ok":true,"changed":true,"sw":"' + $ver + '"}')
+}
+
 function ServeFile($ctx, [string]$path) {
   if ($path -eq '/') { $path = '/index.html' }
   $full = [IO.Path]::GetFullPath((Join-Path $root ($path.TrimStart('/') -replace '/', '\')))
@@ -89,7 +115,7 @@ Write-Host "  Editor:  $editor"
 Write-Host "  App:     http://localhost:$port/"
 Write-Host '  Close this window (or Ctrl+C) to stop.'
 Write-Host ''
-if (-not $NoBrowser) { Start-Process $editor }
+if (-not $NoBrowser) { if ($Open -eq 'app') { Start-Process "http://localhost:$port/" } else { Start-Process $editor } }
 
 try {
   while ($listener.IsListening) {
@@ -101,6 +127,9 @@ try {
       $method = $ctx.Request.HttpMethod
       if ($path -eq '/api/bot-rules' -and $method -eq 'GET') { SendJson $ctx 200 (ReadRules) }
       elseif ($path -eq '/api/bot-rules' -and $method -eq 'POST') { SaveRules $ctx }
+      elseif ($path -eq '/api/ping') { SendJson $ctx 200 '{"ok":true,"local":true}' }
+      elseif ($path -eq '/api/system' -and $method -eq 'GET') { SendJson $ctx 200 (ReadSystem) }
+      elseif ($path -eq '/api/system' -and $method -eq 'POST') { SaveSystem $ctx }
       elseif ($method -eq 'GET') { ServeFile $ctx $path }
       else { SendJson $ctx 405 '{"error":"not supported"}' }
     } catch {

@@ -158,6 +158,134 @@
 
   function save() {
     if (!Store.save()) notify('Depolama dolu! Albümden fotoğraf silmeyi dene.', '⚠️');
+    if (sysCfg().on) { clearTimeout(sysTimer); sysTimer = setTimeout(() => sysPush().catch(() => notify('Sistem kaydı yapılamadı', '⚠️')), 1500); }
+  }
+
+  /* ---------- 💾 Sistem kaydı: yerelde (yerel-duzenleme.bat) eklediklerin js/data/system.js'e yazılır ----------
+   * Dosyadakiler her cihazda bir kez "hazır" olarak eklenir (S().sysSeen: eklenenler; silersen geri gelmez).
+   * Ayar bu tarayıcıda: { on, types: { events, places, scenarios, characters } } */
+  const SYS_TYPES = [
+    { k: 'events', label: '🎬 Kalıp olaylar', on: true },
+    { k: 'places', label: '📍 Mekanlar ve etiketleri', on: true },
+    { k: 'scenarios', label: '📜 Senaryolar', on: true },
+    { k: 'tags', label: '🏷️ Etiketler (senaryo, olay ve mekan etiketleri)', on: true },
+    { k: 'cats', label: '🗂️ Olay kategorileri (eklediklerin ve yeniden adlandırdıkların)', on: true },
+    { k: 'characters', label: '👤 Karakterler (cihazdan yüklenen fotoğraflar dosyayı büyütür)', on: false }
+  ];
+  // etiketler: hazır olanlar (js/data/monia.js) dışında eklediğin / kullandığın tüm senaryo ve olay etiketleri
+  const sysTags = () => {
+    const mo = S().monia || {}, uniq = (list, base) => [...new Set(list)].filter(t => t && !(base || []).includes(t));
+    const inFile = (Stories.SYSTEM || {}).tags || {};
+    return {
+      scenario: uniq([...(inFile.scenario || []), ...(mo.scTagList || []), ...(mo.scenarios || []).flatMap(s => s.tags || [])], (Stories.MONIA || {}).scTags),
+      event: uniq([...(inFile.event || []), ...(mo.evTagList || []), ...(mo.events || []).flatMap(e => e.tags || [])], (Stories.MONIA || {}).evTags)
+    };
+  };
+  const sysSource = k => k === 'characters' ? S().characters : k === 'tags' ? sysTags() : (S().monia || {})[k] || [];
+  let sysTimer = null, sysLast = null, sysLocal = null, sysToldOnce = false, sysPulled = false;
+  function sysCfg(v) {
+    try {
+      if (v) localStorage.setItem('amor-stories:system', JSON.stringify(v));
+      const c = JSON.parse(localStorage.getItem('amor-stories:system')) || {};
+      return { on: !!c.on, types: Object.assign(Object.fromEntries(SYS_TYPES.map(t => [t.k, t.on])), c.types) };
+    } catch (e) { return { on: false, types: {} }; }
+  }
+  // yalnızca yerel sunucu (tools/bot-server.ps1) üzerinden açıldıysa yazılabilir
+  async function sysCheck() {
+    if (sysLocal !== null) return sysLocal;
+    if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return (sysLocal = false);
+    try { const r = await fetch('/api/ping', { cache: 'no-store' }); sysLocal = r.ok && (await r.json()).local === true; }
+    catch (e) { sysLocal = false; }
+    return sysLocal;
+  }
+  async function sysPush(force) {
+    const cfg = sysCfg();
+    if ((!cfg.on && !force) || !(await sysCheck())) return false;
+    // ilk yazmadan önce dosyadakiler buraya çekilir: burada olmayanlar dosyadan silinmez, kopya da oluşmaz
+    if (!sysPulled) await sysPull(true);
+    const file = await (await fetch('/api/system', { cache: 'no-store' })).json();
+    const out = Object.assign({}, file);
+    SYS_TYPES.forEach(t => { if (cfg.types[t.k]) out[t.k] = sysSource(t.k); });
+    if (cfg.types.places || cfg.types.tags) out.groups = (S().monia || {}).groups || [];
+    if (cfg.types.cats) out.catEdits = Object.assign({}, file.catEdits || {}, (S().monia || {}).catEdits || {});
+    const body = JSON.stringify(out, null, 1);
+    if (!force && body === sysLast) return false;
+    const r = await (await fetch('/api/system', { method: 'POST', body })).json();
+    sysLast = body;
+    if (r.ok && (force || !sysToldOnce)) { sysToldOnce = true; notify(r.changed ? 'Sisteme kaydedildi (js/data/system.js)' : 'Sistem dosyası zaten güncel', '💾'); }
+    return r.ok;
+  }
+  /* 📥 Birleştirme: başka yerden gelen Monia verisi (system.js ya da başka cihazdan dışa aktarılan dosya) kopya yaratmadan eklenir.
+   * Aynı kimlik: prefer 'incoming' ise gelen, 'local' ise buradaki kalır. Kimliği farklı ama içeriği aynıysa (moKey) eklenmez. */
+  const MONIA_KEYS = ['cats', 'groups', 'places', 'events', 'scenarios'];
+  function moKey(k, x) {
+    const n = s => String(s || '').toLocaleLowerCase('tr').trim();
+    if (k === 'events') return [x.cat || 'mine', n(x.title), n(x.text), (x.mix || []).join('+')].join('|');
+    if (k === 'scenarios') return [n(x.title), (x.events || []).map(e => n(e.title)).join('+'), n(x.desc)].join('|');
+    if (k === 'characters') return [n(x.name), x.set || ''].join('|');
+    return n(x.name || x.label);
+  }
+  function mergeInto(list, items, k, prefer, r, fix) {
+    (items || []).forEach(x0 => {
+      if (!x0 || !x0.id) return;
+      const x = fix ? fix(x0) : JSON.parse(JSON.stringify(x0));
+      const hit = list.find(y => y.id === x.id);
+      if (hit) {
+        if (prefer === 'incoming' && JSON.stringify(hit) !== JSON.stringify(x)) { Object.keys(hit).forEach(kk => delete hit[kk]); Object.assign(hit, x); r.updated++; }
+        else r.same++;
+        return;
+      }
+      if (list.some(y => moKey(k, y) === moKey(k, x))) { r.same++; return; }
+      list.push(x); r.added++;
+    });
+  }
+  function mergeMonia(data, prefer, fixScenario) {
+    const mo = S().monia = S().monia || {}, r = { added: 0, updated: 0, same: 0 };
+    MONIA_KEYS.forEach(k => mergeInto(mo[k] = mo[k] || [], data[k], k, prefer, r, k === 'scenarios' ? fixScenario : null));
+    if (data.characters) mergeInto(S().characters, data.characters, 'characters', prefer, r);
+    if (data.catEdits) mo.catEdits = prefer === 'incoming' ? Object.assign({}, mo.catEdits, data.catEdits) : Object.assign({}, data.catEdits, mo.catEdits);
+    const tg = data.tags || {};
+    if (tg.scenario) mo.scTagList = [...new Set([...(mo.scTagList || []), ...tg.scenario])];
+    if (tg.event) mo.evTagList = [...new Set([...(mo.evTagList || []), ...tg.event])];
+    return r;
+  }
+  // 🧹 aynı içerikli kopyaları siler (ilk eklenen kalır)
+  function dedupeMonia() {
+    const mo = S().monia || {};
+    let n = 0;
+    MONIA_KEYS.forEach(k => {
+      const seen = new Set();
+      mo[k] = (mo[k] || []).filter(x => { const key = moKey(k, x); if (seen.has(key)) { n++; return false; } seen.add(key); return true; });
+    });
+    return n;
+  }
+  // 📥 system.js'teki her şeyi buraya çek (eksikler eklenir; buradaki düzenlemelerin korunur)
+  async function sysPull(quiet) {
+    if (!(await sysCheck())) return null;
+    const file = await (await fetch('/api/system', { cache: 'no-store' })).json();
+    const r = mergeMonia(file, 'local');
+    sysPulled = true;
+    Store.save();
+    if (!quiet) notify(`Sistemden çekildi: ${r.added} yeni${r.same ? `, ${r.same} zaten vardı` : ''}`, '📥');
+    return r;
+  }
+
+  // js/data/system.js'teki hazırlar bu cihaza eklenir (bir kez)
+  function adoptSystem() {
+    const SYS = Stories.SYSTEM || {};
+    const seen = S().sysSeen = S().sysSeen || [];
+    const mo = S().monia = S().monia || {};
+    let changed = false;
+    ['cats', 'events', 'places', 'groups', 'scenarios', 'characters'].forEach(k => {
+      const target = k === 'characters' ? S().characters : (mo[k] = mo[k] || []);
+      (SYS[k] || []).forEach(x => {
+        if (!x || !x.id || seen.includes(`${k}:${x.id}`)) return;
+        seen.push(`${k}:${x.id}`);
+        if (!target.some(y => y.id === x.id || moKey(k, y) === moKey(k, x))) target.push(JSON.parse(JSON.stringify(x)));
+        changed = true;
+      });
+    });
+    if (changed) Store.save();
   }
 
   function notify(text, icon = '💜') {
@@ -1335,7 +1463,10 @@
       if (scn && scn.i < scn.events.length) {
         // olayın kendi mekanı varsa hikaye oraya geçer
         const at = last ? last.scene : {}, n = scn.i++, e = typeof scn.events[n] === 'string' ? { text: scn.events[n] } : scn.events[n];
-        return { place: e.place || at.place || '', icon: e.icon || at.icon || '🎬', name: e.name || at.name || th.title, hint: e.text, kind: 'hint', ev: `${n + 1}/${scn.events.length}` };
+        const o = { place: e.place || at.place || '', icon: e.icon || at.icon || '🎬', name: e.name || at.name || th.title, hint: e.text, kind: 'hint', ev: `${n + 1}/${scn.events.length}` };
+        if (e.color) o.color = e.color;
+        if (e.emojis) o.emojis = e.emojis;
+        return o;
       }
       if (!last) return pickPlace();
       // buraya gelindiği kart (ipucu olmayan son mekan kartı) ve sonrası
@@ -2088,8 +2219,8 @@
     if (m.from === 'sys' && m.scene) {
       // 📍 mekan kartı; kind 'hint' = aynı yerde sıradaki an (küçük kart)
       const sc = m.scene, p = allPlaces().find(x => x.id === sc.place) || {}, hint = sc.kind === 'hint';
-      return html + `<div class="scene-card g-${esc(groupOf(p))}${hint ? ' sc-hint' : ''}" data-id="${m.id}">
-        <div class="sc-ic">${sc.ev ? '📜' : hint ? '💡' : esc(sc.icon || '📍')}</div>
+      return html + `<div class="scene-card g-${esc(groupOf(p))}${hint ? ' sc-hint' : ''}${evCls(sc)}"${evStyle(sc)} data-id="${m.id}">
+        <div class="sc-ic">${sc.ev ? esc(sc.emojis || '📜') : hint ? '💡' : esc(sc.icon || '📍')}</div>
         <div class="sc-body"><small>${sc.ev ? `📜 Olay ${esc(sc.ev)} · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : hint ? `İpucu · ${esc(sc.icon || '')} ${esc(sc.name || '')}` : '📍 Mekan'}</small>${hint ? '' : `<b>${esc(sc.name || 'Bir yerde')}</b>`}<span>${txt(m.text)}</span></div></div>`;
     }
     if (m.from === 'sys') return html + `<div class="sys" data-id="${m.id}">${txt(m.text)}</div>`;
@@ -2594,7 +2725,9 @@
   const MO = () => S().monia;
   const pickOne = a => a[Math.floor(Math.random() * a.length)];
   const MINE = { id: 'mine', icon: '✍️', label: 'Kalıplarım' };
-  const moCats = () => [...MD.cats, MINE];
+  // 🗂️ Kategoriler: hazırlar (adı / simgesi değiştirilebilir: catEdits, sistem dosyasındakiler önce) + eklediklerin (monia.cats)
+  const catEdits = () => Object.assign({}, ((Stories.SYSTEM || {}).catEdits) || {}, MO().catEdits || {});
+  const moCats = () => { const ed = catEdits(); return [...MD.cats, ...(MO().cats || []), MINE].map(c => ed[c.id] ? { ...c, ...ed[c.id] } : c); };
   // Kategorideki olaylar: hazırlar (b:...) + senin kalıpların (cat'e göre)
   function poolOf(cat) {
     const raw = cat.from === 'extra' ? ((T.groups.find(g => g.id === 'extra') || {}).items || []) : (cat.items || []);
@@ -2618,7 +2751,10 @@
   const evTime = ev => [(MD.parts.find(p => p.id === ev.part) || {}).label, ev.when].filter(Boolean).join(', ');
   function evText(ev, sc, short) {
     const ms = scChars(sc || {}), ben = ms.length ? ms.map(m => m.name.split(' ')[0]).join(' ve ') : 'O';
-    let t = ev.text || `${(moCats().find(c => c.id === ev.cat) || MINE).icon} ${ev.title}`;
+    // 🧩 tek satırda birden çok ekleme: "A + B + C", açıklama altında
+    const mix = (ev.mix || []).filter(Boolean);
+    let t = ev.text || (mix.length ? '' : `${(moCats().find(c => c.id === ev.cat) || MINE).icon} ${ev.title}`);
+    if (mix.length) t = `🧩 ${mix.join(' + ')}${t ? (short ? ' — ' : '\n') + t : ''}`;
     const ep = evPlace(ev), et = evTime(ev);
     if (short && (ep || et)) t += ` (${[et && `🕰️ ${et}`, ep && `${ep.icon} ${ep.name}`].filter(Boolean).join(' · ')})`;
     if (!short && et) t = `🕰️ ${et}\n${t}`;
@@ -2632,7 +2768,23 @@
     return t.replace(/\{ben\}/g, ben).replace(/\{sen\}/g, userName()).replace(/\{mekan\}/g, (ep && ep.name) || scPlaceName(sc) || 'Bir yerde')
       .replace(/\{zaman\}/g, et || timeLabel(sc) || 'bir gün');
   }
-  const EV_FIELDS = ['title', 'text', 'cat', 'steps', 'opener', 'starter', 'tones', 'note', 'part', 'when', 'place'];
+  const EV_FIELDS = ['title', 'text', 'cat', 'steps', 'opener', 'starter', 'tones', 'note', 'part', 'when', 'place', 'mix', 'tags', 'desc', 'color', 'emojis'];
+  // 🎨 olayın rengi ve en fazla iki emojisi (çiplerde, listelerde ve sohbetteki kartta)
+  const EV_COLORS = ['#ff6fa8', '#ff5f5f', '#ff8a65', '#ffb72b', '#34c77b', '#2fb6c7', '#5f8bff', '#8b5cf6', '#c86bff', '#8b8b99'];
+  const isHex = c => /^#[0-9a-f]{6}$/i.test(c || '');
+  function twoEmojis(s) {
+    const parts = window.Intl && Intl.Segmenter ? [...new Intl.Segmenter('tr', { granularity: 'grapheme' }).segment(String(s || ''))].map(x => x.segment) : [...String(s || '')];
+    return parts.filter(g => /\p{Extended_Pictographic}/u.test(g)).slice(0, 2).join('');
+  }
+  const evEmo = e => e && e.emojis ? `${esc(e.emojis)} ` : '';
+  const evStyle = e => e && isHex(e.color) ? ` style="--evc:${e.color}"` : '';
+  const evCls = e => e && isHex(e.color) ? ' has-color' : '';
+  // 🏷️ olay etiketleri: js/data/monia.js evTags + olaylarında kullandıkların
+  const allEvTags = () => [...new Set([...(MD.evTags || []), ...(((Stories.SYSTEM || {}).tags || {}).event || []), ...(MO().evTagList || []), ...MO().events.flatMap(e => e.tags || [])])];
+  // 🧩 eklemeler satırı (düzenleyicilerde): çipler ✕ ile çıkar, ➕ havuzdan / yazarak eklenir
+  const mixRow = mix => `<div class="mo-chips mo-mix">${(mix || []).map((x, i) => `<span class="mo-chip on">${esc(x)}<button type="button" data-mixrm="${i}" aria-label="Çıkar">✕</button></span>`).join('')}
+    <button type="button" class="mo-chip" data-mixadd>➕ Havuzdan</button></div>
+    <div class="pl-own" style="margin-top:6px"><input class="mo-mixin" maxlength="40" placeholder="ya da kendin yaz ve Enter'a bas"></div>`;
   const evCopy = e => {
     const o = { id: Store.uid() };
     EV_FIELDS.forEach(k => { if (e[k] != null && e[k] !== '') o[k] = Array.isArray(e[k]) ? [...e[k]] : e[k]; });
@@ -2658,7 +2810,10 @@
   function addScenario(sc) { MO().scenarios.unshift(sc); save(); location.hash = `#/monia/${sc.id}`; }
 
   // 🏷️ senaryo etiketleri: hazırlar (js/data/monia.js scTags) + senaryolarda kullandıkların
-  const allScTags = () => [...new Set([...(MD.scTags || []), ...MO().scenarios.flatMap(s => s.tags || [])])];
+  // + sistem dosyasındaki (js/data/system.js tags) ve eklediğin etiketler (kullanılmasa da kalır)
+  const SYS_TAGS = (Stories.SYSTEM || {}).tags || {};
+  const allScTags = () => [...new Set([...(MD.scTags || []), ...(SYS_TAGS.scenario || []), ...(MO().scTagList || []), ...MO().scenarios.flatMap(s => s.tags || [])])];
+  const keepTag = (k, t) => { const l = MO()[k] = MO()[k] || []; if (!l.includes(t)) l.push(t); };
   const tagChips = (list, on, attr = 'data-stag') => list.map(t => `<button type="button" class="chip mo-pick${on.includes(t) ? ' on' : ''}" ${attr}="${esc(t)}">🏷️ ${esc(t)}</button>`).join('');
   // senaryodan başlatılan sohbetler ve en son ne zaman oynandığı
   const scThreads = sc => threads().filter(t => t.scenario && t.scenario.id === sc.id).sort((a, b) => activity(b) - activity(a));
@@ -2684,6 +2839,15 @@
       list.length === 1 ? `monia-${(list[0].title || 'senaryo').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase()}-${day}.json` : `monia-senaryolar-${day}.json`);
     notify(`${list.length} senaryo dışa aktarıldı`, '📤');
   }
+  // 📤 Tüm Monia verisi (senaryolar, kalıp olaylar, mekanlar, etiketler, kategoriler): başka cihaza / yerel düzenleyiciye taşımak için
+  function exportAllMonia() {
+    const mo = MO(), day = new Date().toISOString().slice(0, 10);
+    downloadJson({ format: 'amor-stories-monia', version: 2, exported: day,
+      scenarios: mo.scenarios.map(s => { const c = JSON.parse(JSON.stringify(s)); c.charNames = scChars(s).map(m => m.name); return c; }),
+      events: mo.events, places: mo.places, groups: mo.groups, cats: mo.cats || [], catEdits: mo.catEdits || {}, tags: sysTags() },
+      `monia-tumu-${day}.json`);
+    notify('Monia verisi dışa aktarıldı', '📤');
+  }
   function importScenarios() {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = '.json,application/json';
@@ -2693,19 +2857,16 @@
       try {
         const data = JSON.parse(await f.text());
         if (!data || data.format !== 'amor-stories-monia' || !Array.isArray(data.scenarios)) throw new Error('format');
-        const has = (arr, id) => arr.some(x => x.id === id);
-        ['groups', 'places', 'events'].forEach(k => (data[k] || []).forEach(x => { if (x && x.id && !has(MO()[k], x.id)) MO()[k].push(x); }));
-        let n = 0;
-        data.scenarios.forEach(s => {
-          if (!s || !Array.isArray(s.events)) return;
-          const c = { ...s, id: has(MO().scenarios, s.id) ? Store.uid() : s.id || Store.uid(), tags: s.tags || [], created: s.created || Date.now() };
+        // aynı kimlikli kayıt güncellenir, aynı içerikli kopya eklenmez
+        const r = mergeMonia(data, 'incoming', s => {
+          const c = JSON.parse(JSON.stringify({ ...s, tags: s.tags || [], events: s.events || [], created: s.created || Date.now() }));
           // karakterler bu cihazda yoksa adlarından bulunur, bulunamazsa boş kalır (başlatırken seçersin)
           c.chars = (s.chars || []).map((id, i) => byId(id) ? id : (chars().find(m => m.name === (s.charNames || [])[i]) || {}).id).filter(Boolean);
           delete c.charNames;
-          MO().scenarios.unshift(c); n++;
+          return c;
         });
         save();
-        notify(`${n} senaryo içe aktarıldı`, '📥');
+        notify(`İçe aktarıldı: ${r.added} yeni, ${r.updated} güncellendi${r.same ? `, ${r.same} zaten vardı` : ''}`, '📥');
         render();
       } catch (e) { notify('Bu dosya bir Monia senaryo dosyası değil', '⚠️'); }
     };
@@ -2833,17 +2994,27 @@
             <div class="mo-sc-avas">${scChars(s).slice(0, 3).map(c => avatar(c, 34)).join('')}</div></a>`).join('')}</div>`
           : '<div class="about card">Henüz senaryo yok. 🎲 ile rastgele üret ya da boş bir senaryo kur: zamanı, mekanı ve olayları seç, sonra ▶️ ile hikayeyi başlat. Olaylar sohbet ilerledikçe sırayla 📜 kart olarak gelir.</div>'}
         <div class="sec-title">Olay havuzu <small>(${allEvents().length})</small></div>
-        <button class="btn ghost block" id="moEvNew">➕ Kalıp olay oluştur</button>
-        ${moCats().map(cat => { const evs = poolOf(cat); return evs.length || cat.id === 'mine' ? `
+        <div class="mo-ev-btns">
+          <button class="btn ghost sm" id="moEvNew">➕ Kalıp olay oluştur</button>
+          <button class="btn ghost sm" id="moCats">🗂️ Kategoriler</button>
+          <button class="btn ghost sm" id="moPoolView">${ui.poolList ? '🔘 Çipler' : '≣ Açıklamalarla'}</button>
+        </div>
+        ${allEvTags().length ? `<div class="chips mo-filter" style="margin-top:10px">${tagChips(allEvTags(), ui.evTag ? [ui.evTag] : [], 'data-evf')}</div>` : ''}
+        ${moCats().map(cat => { const evs = poolOf(cat).filter(e => !ui.evTag || (e.tags || []).includes(ui.evTag)); return evs.length || ((cat.id === 'mine' || cat.id.startsWith('c:')) && !ui.evTag) ? `
           <div class="mo-cat"><div class="mo-cat-head">${cat.icon} ${esc(cat.label)} <small>${evs.length}</small></div>
-            <div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip${e.builtin ? '' : ' mine'}" data-ev="${esc(e.id)}" title="${esc(e.text || e.title)}">${esc(e.title)}</button>`).join('') || '<small class="mo-empty">Kendi kalıplarını ➕ ile ekle</small>'}</div></div>` : ''; }).join('')}
+            ${ui.poolList && evs.length
+              ? `<div class="mo-evlist">${evs.map(e => `<button type="button" class="mo-evrow${e.builtin ? '' : ' mine'}${evCls(e)}"${evStyle(e)} data-ev="${esc(e.id)}"><b>${evEmo(e)}${esc(e.title)}</b>${e.desc || e.text ? `<small>${esc(e.desc || e.text)}</small>` : '<small class="none">açıklama yok · ekle</small>'}</button>`).join('')}</div>`
+              : `<div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip${e.builtin ? '' : ' mine'}${e.desc ? ' has-desc' : ''}${evCls(e)}"${evStyle(e)} data-ev="${esc(e.id)}" title="${esc(e.desc || e.text || e.title)}">${evEmo(e)}${esc(e.title)}</button>`).join('') || '<small class="mo-empty">Bu kategoriye olay eklemek için ➕ Kalıp olay oluştur</small>'}</div>`}</div>` : ''; }).join('')}
       </div>`;
     $('#moRandom').onclick = () => addScenario(randomScenario());
     $('#moNew').onclick = () => addScenario({ id: Store.uid(), title: 'Yeni senaryo', chars: [], part: '', day: '', season: '', timeNote: '', place: '', placeName: '', placeIcon: '', events: [], created: Date.now() });
     $('#moEvNew').onclick = () => { ui.moReturn = null; location.hash = '#/monia/olay/yeni'; };
+    $('#moCats').onclick = () => catSheet(render);
+    $('#moPoolView').onclick = () => { const y = window.scrollY; ui.poolList = !ui.poolList; render(); window.scrollTo(0, y); };
     $('#moExport').onclick = () => exportScenarios(list.length ? list : MO().scenarios);
     $('#moImport').onclick = importScenarios;
     view.querySelectorAll('[data-ftag]').forEach(b => b.onclick = () => { ui.storyTag = ui.storyTag === b.dataset.ftag ? '' : b.dataset.ftag; render(); });
+    view.querySelectorAll('[data-evf]').forEach(b => b.onclick = () => { const y = window.scrollY; ui.evTag = ui.evTag === b.dataset.evf ? '' : b.dataset.evf; render(); window.scrollTo(0, y); });
     view.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { ui.moReturn = null; location.hash = `#/monia/olay/${encodeURIComponent(b.dataset.ev)}`; });
   }
 
@@ -2859,7 +3030,11 @@
       for: id, title: base ? base.title : '', cat: base ? base.cat || 'mine' : 'mine', text: base ? base.text || '' : '',
       steps: base && base.steps ? [...base.steps] : [], opener: base ? base.opener || '' : '', starter: base ? base.starter || '' : '',
       tones: base && base.tones ? [...base.tones] : [], note: base ? base.note || '' : '',
-      part: base ? base.part || '' : '', when: base ? base.when || '' : '', place: base ? base.place || '' : '' });
+      part: base ? base.part || '' : '', when: base ? base.when || '' : '', place: base ? base.place || '' : '',
+      mix: base && base.mix ? [...base.mix] : [], tags: base && base.tags ? [...base.tags] : [], desc: base ? base.desc || '' : '',
+      color: base ? base.color || '' : '', emojis: base ? base.emojis || '' : '' });
+    d.desc = d.desc || ''; d.color = d.color || ''; d.emojis = d.emojis || '';
+    d.mix = d.mix || []; d.tags = d.tags || [];
     const draw = () => renderEventEditor(rawId);
     const chip = (attr, val, label, on) => `<button type="button" class="chip mo-pick${on ? ' on' : ''}" ${attr}="${esc(val)}">${label}</button>`;
     const preview = () => evText(d, null).replace(/\n/g, '<br>');
@@ -2870,10 +3045,34 @@
         ${base && base.builtin ? '<div class="about card">Hazır olay. Kaydedince detaylı hali havuzda bunun yerine geçer (istersen sonra hazır haline dönebilirsin).</div>' : ''}
 
         <div class="card">
-          <div class="sec-title" style="margin-top:0">🗂️ Kategori</div>
+          <div class="sec-title" style="margin-top:0">🎨 Renk ve emoji <small>· en fazla iki emoji</small></div>
+          <div class="ev-look">
+            <span class="mo-chip ev-sample${evCls(d)}"${evStyle(d)}>${evEmo(d)}${esc(d.title || 'Olay')}</span>
+            <input id="evEmo" maxlength="16" value="${esc(d.emojis)}" placeholder="🔥💋" inputmode="text">
+          </div>
+          <div class="ev-colors">${EV_COLORS.map(c => `<button type="button" class="ev-sw${d.color === c ? ' on' : ''}" data-ecolor="${c}" style="background:${c}" aria-label="Renk ${c}"></button>`).join('')}
+            <label class="ev-sw ev-custom${d.color && !EV_COLORS.includes(d.color) ? ' on' : ''}" title="Kendi rengin"${d.color && !EV_COLORS.includes(d.color) ? ` style="background:${d.color}"` : ''}>🎨<input type="color" id="evColor" value="${isHex(d.color) ? d.color : '#8b5cf6'}"></label>
+            <button type="button" class="ev-sw ev-none${d.color ? '' : ' on'}" data-ecolor="" aria-label="Renksiz">✕</button></div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">📝 Açıklama <small>· bu olay nedir, nasıl kullanılır; sohbette görünmez, havuzda ve seçerken görünür</small></div>
+          <textarea class="mo-area" id="evDesc" rows="3" maxlength="1000" placeholder="ör. İlk buluşmanın sonunda, ikisi de çekingenken kullan.">${esc(d.desc)}</textarea>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🗂️ Kategori <button type="button" class="pl-roll" id="evCats" aria-label="Kategorileri düzenle">✏️</button></div>
           <div class="chips">${moCats().map(c => chip('data-cat', c.id, `${c.icon} ${esc(c.label)}`, d.cat === c.id)).join('')}</div>
+          <div class="sec-title">🏷️ Etiketler</div>
+          <div class="chips">${[...new Set([...allEvTags(), ...d.tags])].map(t => chip('data-etag', t, `🏷️ ${esc(t)}`, d.tags.includes(t))).join('')}</div>
+          <div class="pl-own" style="margin-top:6px"><input class="mo-evtagin" maxlength="24" placeholder="Yeni etiket yaz ve Enter'a bas"></div>
           <div class="sec-title">🎭 Ton</div>
           <div class="chips">${(MD.tones || []).map(t => chip('data-tone', t, esc(t), d.tones.includes(t))).join('')}</div>
+        </div>
+
+        <div class="card">
+          <div class="sec-title" style="margin-top:0">🧩 Eklemeler <small>· bu olayda birlikte olacaklar (tek satırda); açıklamasını aşağıya yaz</small></div>
+          ${mixRow(d.mix)}
         </div>
 
         <div class="card">
@@ -2886,7 +3085,7 @@
         </div>
 
         <div class="card">
-          <div class="sec-title" style="margin-top:0">📖 Olay</div>
+          <div class="sec-title" style="margin-top:0">📖 Olay metni <small>· sohbette 📜 kartta görünür</small></div>
           <textarea class="mo-area" id="evText" rows="6" maxlength="2000" placeholder="Ne oluyor? Ortam, his, ayrıntılar… ör. {ben} haber vermeden kapıda beliriyor; elinde bir şişe şarap var, yüzü kızarmış.">${esc(d.text)}</textarea>
           <div class="mo-vars">Değişkenler: <code>{ben}</code> karakter · <code>{sen}</code> sen · <code>{mekan}</code> · <code>{zaman}</code></div>
         </div>
@@ -2912,7 +3111,7 @@
 
         <div class="card">
           <div class="sec-title" style="margin-top:0">👁️ Sohbette böyle görünecek</div>
-          <div class="scene-card sc-hint mo-prev"><div class="sc-ic">📜</div><div class="sc-body"><small>📜 Olay · ${esc(d.title || 'Adsız')}${evPlace(d) ? ` · ${esc(evPlace(d).icon + ' ' + evPlace(d).name)}` : ''}</small><span id="evPrev">${preview()}</span></div></div>
+          <div class="scene-card sc-hint mo-prev${evCls(d)}"${evStyle(d)}><div class="sc-ic">${esc(d.emojis || '📜')}</div><div class="sc-body"><small>📜 Olay · ${esc(d.title || 'Adsız')}${evPlace(d) ? ` · ${esc(evPlace(d).icon + ' ' + evPlace(d).name)}` : ''}</small><span id="evPrev">${preview()}</span></div></div>
         </div>
 
         <button class="btn primary block" id="evSave" style="margin-top:6px">${mine ? 'Kaydet' : ui.moReturn ? 'Kaydet ve senaryoya ekle' : 'Havuza ekle'}</button>
@@ -2922,8 +3121,29 @@
 
     const live = () => { const p = $('#evPrev'); if (p) p.innerHTML = preview(); };
     const bindIn = (sel, k) => { $(sel).oninput = e => { d[k] = e.target.value; live(); }; };
+    bindIn('#evDesc', 'desc');
+    // sadece emojiler kalır, en fazla iki
+    $('#evEmo').onchange = e => { d.emojis = twoEmojis(e.target.value); draw(); };
+    $('#evColor').oninput = e => { d.color = e.target.value; };
+    $('#evColor').onchange = e => { d.color = e.target.value; draw(); };
+    $('#evCats').onclick = () => catSheet(draw);
     bindIn('#evTitle', 'title'); bindIn('#evText', 'text'); bindIn('#evOpener', 'opener'); bindIn('#evNote', 'note'); bindIn('#evWhen', 'when');
     $('#evPlace').onchange = e => { d.place = e.target.value; draw(); };
+    const tagIn = view.querySelector('.mo-evtagin');
+    tagIn.onkeydown = e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const v = tagIn.value.trim();
+      const t = v && (allEvTags().find(x => x.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr')) || v);
+      if (t && !d.tags.includes(t)) { keepTag('evTagList', t); save(); d.tags.push(t); draw(); view.querySelector('.mo-evtagin').focus(); }
+    };
+    const mixIn = view.querySelector('.mo-mixin');
+    mixIn.onkeydown = e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const v = mixIn.value.trim();
+      if (v && !d.mix.includes(v)) { d.mix.push(v); draw(); view.querySelector('.mo-mixin').focus(); }
+    };
     view.querySelectorAll('[data-step]').forEach(inp => inp.oninput = () => { d.steps[+inp.dataset.step] = inp.value; live(); });
     $('#evBack').onclick = () => { ui.evDraft = null; };
     view.onclick = e => {
@@ -2931,7 +3151,11 @@
       if (!b) return;
       const ds = b.dataset;
       if (ds.cat) { d.cat = ds.cat; return draw(); }
+      if ('ecolor' in ds) { d.color = ds.ecolor; return draw(); }
       if (ds.epart) { d.part = d.part === ds.epart ? '' : ds.epart; return draw(); }
+      if (ds.etag) { d.tags = d.tags.includes(ds.etag) ? d.tags.filter(t => t !== ds.etag) : [...d.tags, ds.etag]; return draw(); }
+      if (ds.mixrm != null) { d.mix.splice(+ds.mixrm, 1); return draw(); }
+      if ('mixadd' in ds) return poolPicker({ title: '🧩 Eklemeler', skip: [...d.mix, d.title] }, evs => { evs.forEach(x => { if (!d.mix.includes(x.title)) d.mix.push(x.title); }); draw(); });
       if (ds.tone) { d.tones = d.tones.includes(ds.tone) ? d.tones.filter(t => t !== ds.tone) : [...d.tones, ds.tone]; return draw(); }
       if ('starter' in ds) { d.starter = ds.starter; return draw(); }
       if (b.id === 'evStep') { d.steps.push(''); draw(); const ins = view.querySelectorAll('[data-step]'); ins[ins.length - 1].focus(); return; }
@@ -2945,9 +3169,9 @@
     };
     $('#evSave').onclick = () => {
       const data = { title: d.title.trim(), cat: d.cat, text: d.text.trim(), steps: d.steps.map(s => s.trim()).filter(Boolean),
-        opener: d.opener.trim(), starter: d.starter, tones: d.tones, note: d.note.trim(), part: d.part, when: d.when.trim(), place: d.place };
-      if (!data.title && !data.text) { notify('Bir başlık ya da olay yaz', '✍️'); return; }
-      data.title = data.title || data.text.replace(/\{\w+\}/g, '').trim().slice(0, 30);
+        opener: d.opener.trim(), starter: d.starter, tones: d.tones, note: d.note.trim(), part: d.part, when: (d.when || '').trim(), place: d.place, mix: d.mix, tags: d.tags, desc: d.desc.trim(), color: isHex(d.color) ? d.color : '', emojis: twoEmojis(d.emojis) };
+      if (!data.title && !data.text && !data.mix.length) { notify('Bir başlık, olay ya da ekleme yaz', '✍️'); return; }
+      data.title = data.title || (data.mix.length ? data.mix.join(' + ') : data.text.replace(/\{\w+\}/g, '').trim().slice(0, 30));
       let saved;
       if (mine) saved = Object.assign(MO().events.find(x => x.id === base.id), data);
       else {
@@ -2970,6 +3194,99 @@
     };
     if (del) del.onclick = remove('Bu olay silinsin mi? (Senaryolardaki kopyaları kalır)');
     if (reset) reset.onclick = remove('Detaylı hali silinip hazır olay geri gelsin mi?');
+  }
+
+  // 🗂️ Olay kategorilerini yönet: hazırların adı / simgesi değişir, yenileri eklenir / silinir (olayları "Kalıplarım"a geçer)
+  function catSheet(done) {
+    const base = [...MD.cats, MINE];
+    const row = c => `<div class="cat-row" data-cid="${esc(c.id)}">
+      <input class="cat-ic" maxlength="4" value="${esc(c.icon)}"><input class="cat-lb" maxlength="30" value="${esc(c.label)}">
+      ${base.some(b => b.id === c.id) ? `<small>hazır${c.from === 'extra' ? ' · özellik listesi' : ''}</small>` : '<button type="button" class="icon-btn" data-catdel aria-label="Sil">🗑️</button>'}</div>`;
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>🗂️ Olay kategorileri</h3>
+      <div class="about" style="margin-bottom:10px">Adını ve simgesini değiştirebilir, yeni kategori ekleyebilirsin. Sistem kaydı açıksa bunlar da <b>js/data/system.js</b>'e yazılır.</div>
+      <div class="cat-list">${moCats().map(row).join('')}</div>
+      <div class="sec-title">➕ Yeni kategori</div>
+      <div class="pl-own"><input id="catNewIc" maxlength="4" placeholder="🗂️"><input id="catNewLb" maxlength="30" placeholder="ör. Ofis olayları"><button type="button" class="btn ghost sm" id="catAdd">Ekle</button></div>
+      <button class="btn primary block" id="catSave" style="margin-top:14px">Kaydet</button>`, 'light');
+    const el = sh.el;
+    const apply = () => {
+      const mo = MO();
+      mo.cats = mo.cats || []; mo.catEdits = mo.catEdits || {};
+      el.querySelectorAll('.cat-row').forEach(r => {
+        const id = r.dataset.cid, icon = r.querySelector('.cat-ic').value.trim() || '🗂️', label = r.querySelector('.cat-lb').value.trim() || 'Adsız';
+        const own = mo.cats.find(c => c.id === id), orig = base.find(c => c.id === id);
+        if (own) Object.assign(own, { icon, label });
+        else if (orig) { if (icon === orig.icon && label === orig.label) delete mo.catEdits[id]; else mo.catEdits[id] = { icon, label }; }
+      });
+    };
+    el.onclick = e => {
+      if (e.target.closest('#catAdd')) {
+        const label = el.querySelector('#catNewLb').value.trim();
+        if (!label) { notify('Kategoriye bir ad ver', '🗂️'); return; }
+        apply();
+        MO().cats.push({ id: 'c:' + Store.uid(), icon: el.querySelector('#catNewIc').value.trim() || '🗂️', label });
+        save(); sh.close(); catSheet(done);
+        return;
+      }
+      const del = e.target.closest('[data-catdel]');
+      if (del) {
+        const id = del.closest('.cat-row').dataset.cid, n = MO().events.filter(x => x.cat === id).length;
+        if (!confirm(`Kategori silinsin mi?${n ? ` İçindeki ${n} olay "Kalıplarım"a geçer.` : ''}`)) return;
+        apply();
+        MO().cats = MO().cats.filter(c => c.id !== id);
+        MO().events.forEach(x => { if (x.cat === id) x.cat = 'mine'; });
+        save(); sh.close(); catSheet(done);
+        return;
+      }
+      if (e.target.closest('#catSave')) { apply(); save(); sh.close(); notify('Kategoriler kaydedildi', '🗂️'); if (done) done(); }
+    };
+  }
+
+  // Havuzdan çoklu seçim. opts.merge: "tek satırda birleştir" seçeneği; cb(seçilen olaylar, birleştirilsin mi)
+  function poolPicker(opts, cb) {
+    const sel = [];
+    const sh = sheet(`
+      <div class="sheet-grip"></div>
+      <h3>${esc(opts.title)}</h3>
+      ${allEvTags().length ? `<div class="chips mo-filter">${tagChips(allEvTags(), [], 'data-pf')}</div>` : ''}
+      ${moCats().map(cat => { const evs = poolOf(cat).filter(e => !(opts.skip || []).includes(e.title)); return evs.length ? `<div class="mo-sub">${cat.icon} ${esc(cat.label)}</div>
+        <div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip${evCls(e)}"${evStyle(e)} data-pick="${esc(e.id)}" data-tags="${esc((e.tags || []).join('|'))}" data-desc="${esc(e.desc || e.text || '')}" title="${esc(e.desc || e.text || '')}">${evEmo(e)}${esc(e.title)}</button>`).join('')}</div>` : ''; }).join('')}
+      <div class="mo-pool-foot">
+        <div class="mo-pick-info" id="poolInfo" hidden></div>
+        ${opts.merge ? '<label class="mo-check"><input type="checkbox" id="poolMerge"> 🧩 Seçtiklerimi tek satırda birleştir (tek olay + açıklama)</label>' : ''}
+        <button class="btn primary block" id="poolAdd">Ekle</button>
+      </div>`, 'light');
+    const btn = sh.el.querySelector('#poolAdd');
+    let ptag = '';
+    sh.el.onclick = e => {
+      const f = e.target.closest('[data-pf]');
+      if (f) {
+        // etikete göre süz: seçili etiketi taşımayan olaylar gizlenir
+        ptag = ptag === f.dataset.pf ? '' : f.dataset.pf;
+        sh.el.querySelectorAll('[data-pf]').forEach(x => x.classList.toggle('on', x.dataset.pf === ptag));
+        sh.el.querySelectorAll('[data-pick]').forEach(x => { x.hidden = !!ptag && !x.dataset.tags.split('|').includes(ptag); });
+        sh.el.querySelectorAll('.mo-chips').forEach(c => { const s = c.previousElementSibling; if (s && s.classList.contains('mo-sub')) s.hidden = c.hidden = ![...c.children].some(x => !x.hidden); });
+        return;
+      }
+      const b = e.target.closest('[data-pick]');
+      if (b) {
+        const i = sel.indexOf(b.dataset.pick);
+        i >= 0 ? sel.splice(i, 1) : sel.push(b.dataset.pick);
+        b.classList.toggle('on', i < 0);
+        btn.textContent = sel.length ? `Ekle (${sel.length})` : 'Ekle';
+        // dokunduğun olayın açıklaması altta görünür
+        const info = sh.el.querySelector('#poolInfo');
+        info.hidden = i >= 0 || !b.dataset.desc;
+        info.innerHTML = `<b>${esc(b.textContent)}</b> · ${esc(b.dataset.desc)}`;
+        return;
+      }
+      if (!e.target.closest('#poolAdd') || !sel.length) return;
+      const pool = allEvents(), m = sh.el.querySelector('#poolMerge');
+      sh.close();
+      cb(sel.map(id => pool.find(x => x.id === id)).filter(Boolean), !!(m && m.checked));
+    };
   }
 
   // Zaman / Mekan panellerinin açık-kapalı hali: { time: kapalı mı, place: kapalı mı }
@@ -3095,8 +3412,8 @@
 
         <div class="card">
           <div class="sec-title" style="margin-top:0">📜 Olaylar <small>(${sc.events.length}) · sohbette sırayla gelir</small></div>
-          <div class="mo-evs">${sc.events.map((e, i) => `<div class="mo-ev" data-i="${i}">
-              <span class="n">${i + 1}</span><span class="t">${evPlace(e) ? `<em class="mo-tag">${esc(evPlace(e).icon + ' ' + evPlace(e).name)}</em>` : ''}${esc(evText(e, sc))}</span>
+          <div class="mo-evs">${sc.events.map((e, i) => `<div class="mo-ev${evCls(e)}"${evStyle(e)} data-i="${i}">
+              <span class="n">${i + 1}</span><span class="t">${evPlace(e) ? `<em class="mo-tag">${esc(evPlace(e).icon + ' ' + evPlace(e).name)}</em>` : ''}${e.emojis ? `<b class="mo-emo">${esc(e.emojis)}</b> ` : ''}${esc(evText(e, sc))}${e.desc ? `<small class="mo-desc">📝 ${esc(e.desc)}</small>` : ''}</span>
               <span class="a">${i > 0 ? '<button type="button" data-up aria-label="Yukarı">⬆️</button>' : ''}${i < sc.events.length - 1 ? '<button type="button" data-down aria-label="Aşağı">⬇️</button>' : ''}<button type="button" data-edit aria-label="Düzenle">✏️</button><button type="button" data-rm aria-label="Kaldır">✕</button></span></div>`).join('')
             || '<div class="about">Henüz olay yok. Havuzdan seç, kendin yaz ya da rastgele ekle.</div>'}</div>
           <div class="mo-ev-btns">
@@ -3122,6 +3439,7 @@
       const v = $('#scTagIn').value.trim();
       if (!v) return;
       const t = allScTags().find(x => x.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr')) || v;
+      keepTag('scTagList', t);
       set({ tags: [...new Set([...(sc.tags || []), t])] });
     };
     $('#scTagAdd').onclick = addTag;
@@ -3182,8 +3500,10 @@
         <div class="sheet-grip"></div>
         <h3>${ev ? '✏️ Olayı düzenle' : '✍️ Olay yaz'}</h3>
         <form id="wForm" autocomplete="off">
-          <div class="field" style="margin-top:0"><textarea id="wText" rows="3" maxlength="400" placeholder="{ben} sana bir sır veriyor…">${esc(ev ? ev.text || ev.title : '')}</textarea></div>
+          <div class="field" style="margin-top:0"><textarea id="wText" rows="3" maxlength="400" placeholder="{ben} sana bir sır veriyor… (eklemeler varsa: açıklaması)">${esc(ev ? ev.text || ((ev.mix || []).length ? '' : ev.title) : '')}</textarea></div>
           <div class="mo-vars">Değişkenler: <code>{ben}</code> · <code>{sen}</code> · <code>{mekan}</code> · <code>{zaman}</code></div>
+          <div class="field"><label>📝 Açıklama <small>· sohbette görünmez</small></label><input id="wDesc" maxlength="1000" value="${esc(ev ? ev.desc || '' : '')}" placeholder="Bu olay nedir, ne zaman kullanılır?"></div>
+          <div class="field"><label>🧩 Eklemeler <small>· tek satırda birlikte olacaklar; üstteki metin sohbette altında görünür</small></label><div id="wMix"></div></div>
           <div class="field"><label>🕰️ Zaman</label><select id="wPart"><option value="">Senaryonun zamanı</option>
             ${MD.parts.map(p => `<option value="${p.id}"${ev && ev.part === p.id ? ' selected' : ''}>${p.icon} ${esc(p.label)}</option>`).join('')}</select></div>
           <div class="field"><input id="wWhen" maxlength="60" value="${esc(ev ? ev.when || '' : '')}" placeholder="Zaman notu (ör. ertesi sabah)"></div>
@@ -3195,47 +3515,55 @@
           ${ev ? '' : '<button class="btn ghost block" type="button" id="wFull" style="margin-top:8px">📝 Detaylı editörde yaz</button>'}
         </form>`, 'light');
       setTimeout(() => sh.el.querySelector('#wText').focus(), 250);
+      const mix = ev && ev.mix ? [...ev.mix] : [];
+      const drawMix = () => {
+        sh.el.querySelector('#wMix').innerHTML = mixRow(mix);
+        const inp = sh.el.querySelector('.mo-mixin');
+        inp.onkeydown = e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const v = inp.value.trim();
+          if (v && !mix.includes(v)) { mix.push(v); drawMix(); sh.el.querySelector('.mo-mixin').focus(); }
+        };
+      };
+      drawMix();
+      sh.el.querySelector('#wMix').onclick = e => {
+        const rm = e.target.closest('[data-mixrm]');
+        if (rm) { mix.splice(+rm.dataset.mixrm, 1); drawMix(); return; }
+        if (e.target.closest('[data-mixadd]')) poolPicker({ title: '🧩 Eklemeler', skip: mix }, evs => { evs.forEach(x => { if (!mix.includes(x.title)) mix.push(x.title); }); drawMix(); });
+      };
       const full = sh.el.querySelector('#wFull');
       if (full) full.onclick = () => {
         sh.close();
         ui.moReturn = sc.id;
         ui.evDraft = { for: 'yeni', title: '', cat: 'mine', text: sh.el.querySelector('#wText').value, steps: [], opener: '', starter: '', tones: [], note: '',
-          part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value, place: sh.el.querySelector('#wPlace').value };
+          part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value, place: sh.el.querySelector('#wPlace').value, mix: [...mix], tags: [], desc: sh.el.querySelector('#wDesc').value };
         location.hash = '#/monia/olay/yeni';
       };
       sh.el.querySelector('#wForm').onsubmit = e => {
         e.preventDefault();
         const text = sh.el.querySelector('#wText').value.trim();
-        if (!text) return;
-        const title = text.replace(/\{\w+\}/g, '').trim().slice(0, 30) || 'Olay';
+        if (!text && !mix.length) return;
+        const title = mix.length ? mix.join(' + ') : text.replace(/\{\w+\}/g, '').trim().slice(0, 30) || 'Olay';
         const keep = sh.el.querySelector('#wKeep').value;
-        const wt = { part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value.trim(), place: sh.el.querySelector('#wPlace').value };
-        if (ev) Object.assign(ev, { text, title: ev.title && ev.text ? ev.title : title }, wt);
+        const wt = { part: sh.el.querySelector('#wPart').value, when: sh.el.querySelector('#wWhen').value.trim(), place: sh.el.querySelector('#wPlace').value, mix: [...mix], desc: sh.el.querySelector('#wDesc').value.trim() };
+        if (ev) Object.assign(ev, { text, title: ev.title && ev.text && !ev.mix ? ev.title : title }, wt);
         else sc.events.push({ id: Store.uid(), title, text, cat: keep || 'mine', ...wt });
         if (keep) MO().events.push({ ...evCopy(ev || { title, text, ...wt }), cat: keep });
         save(); sh.close(); draw();
       };
     }
     // havuzdan çoklu seçim
-    $('#scPool').onclick = () => {
-      const sel = new Set();
-      const sh = sheet(`
-        <div class="sheet-grip"></div>
-        <h3>➕ Havuzdan olay ekle</h3>
-        ${moCats().map(cat => { const evs = poolOf(cat); return evs.length ? `<div class="mo-sub">${cat.icon} ${esc(cat.label)}</div>
-          <div class="mo-chips">${evs.map(e => `<button type="button" class="mo-chip" data-pick="${esc(e.id)}" title="${esc(e.text || '')}">${esc(e.title)}</button>`).join('')}</div>` : ''; }).join('')}
-        <button class="btn primary block" id="poolAdd" style="margin-top:14px">Ekle</button>`, 'light');
-      const btn = sh.el.querySelector('#poolAdd');
-      sh.el.onclick = e => {
-        const b = e.target.closest('[data-pick]');
-        if (b) { sel.has(b.dataset.pick) ? sel.delete(b.dataset.pick) : sel.add(b.dataset.pick); b.classList.toggle('on'); btn.textContent = sel.size ? `Ekle (${sel.size})` : 'Ekle'; return; }
-        if (e.target.closest('#poolAdd')) {
-          const pool = allEvents();
-          [...sel].forEach(id => { const ev = pool.find(x => x.id === id); if (ev) sc.events.push(evCopy(ev)); });
-          save(); sh.close(); draw();
-        }
-      };
-    };
+    // havuzdan: ayrı ayrı olay olarak ya da 🧩 tek satırda birleşik (açıklaması sonra yazılır)
+    $('#scPool').onclick = () => poolPicker({ title: '➕ Havuzdan olay ekle', merge: true }, (evs, merged) => {
+      if (merged && evs.length > 1) {
+        const ev = { id: Store.uid(), title: evs.map(e => e.title).join(' + '), text: '', cat: 'mine', mix: evs.map(e => e.title) };
+        sc.events.push(ev); save(); draw(); writeEvent(ev);
+        return;
+      }
+      evs.forEach(e => sc.events.push(evCopy(e)));
+      save(); draw();
+    });
     $('#scWrite').onclick = () => writeEvent(null);
     $('#scRand').onclick = () => {
       const pool = allEvents().filter(e => !sc.events.some(x => x.title === e.title));
@@ -3270,7 +3598,12 @@
     if (pl || sc.placeName) list.push({ id: Store.uid(), from: 'sys', ts: now, text: [tl, hint].filter(Boolean).join(' · '),
       scene: { place: sc.placeName ? '' : sc.place, icon: scPlaceIcon(sc), name: scPlaceName(sc), hint } });
     else if (tl) list.push({ id: Store.uid(), from: 'sys', ts: now, text: `🕰️ ${tl}` });
-    const evs = sc.events.map(e => { const p = evPlace(e); return p ? { text: evText(e, sc), place: p.id, icon: p.icon, name: p.name } : { text: evText(e, sc) }; });
+    const evs = sc.events.map(e => {
+      const p = evPlace(e), o = p ? { text: evText(e, sc), place: p.id, icon: p.icon, name: p.name } : { text: evText(e, sc) };
+      if (isHex(e.color)) o.color = e.color;
+      if (e.emojis) o.emojis = e.emojis;
+      return o;
+    });
     const plan = sc.events.map((e, i) => `${i + 1}) ${evText(e, sc, true)}`).join('  ');
     if (evs.length || sc.desc) list.push({ id: Store.uid(), from: 'sys', ts: now + 1,
       text: `🎬 ${sc.title}${sc.desc ? `\n${sc.desc}` : ''}${evs.length ? `\n📜 ${plan}` : ''}` });
@@ -3324,6 +3657,24 @@
         </div>
 
         <div class="card" style="margin-top:12px">
+          <div class="sec-title" style="margin-top:0">💾 Sistem kaydı <small>· yerel düzenleme</small></div>
+          <div class="about">Açıkken eklediklerin tarayıcının yanında <b>js/data/system.js</b> dosyasına da yazılır; GitHub'a yükleyince her cihazda hazır gelir. Sadece <b>yerel-duzenleme.bat</b> ile açınca çalışır.</div>
+          <div class="sys-stat" id="sysStat">Yerel sunucu kontrol ediliyor…</div>
+          <label class="flt-row"><span><b>Sistem kaydı açık</b></span><input type="checkbox" id="sysOn"${sysCfg().on ? ' checked' : ''}></label>
+          ${SYS_TYPES.map(t => `<label class="flt-row sys-type"><span>${esc(t.label)}</span><input type="checkbox" data-systype="${t.k}"${sysCfg().types[t.k] ? ' checked' : ''}></label>`).join('')}
+          <button class="btn ghost block" id="sysCats" style="margin-top:10px">🗂️ Olay kategorilerini ekle / düzenle</button>
+          <button class="btn ghost block" id="sysPull" style="margin-top:8px">📥 Sistemdekileri buraya çek (system.js)</button>
+          <button class="btn ghost block" id="sysNow" style="margin-top:8px">💾 Şimdi sisteme kaydet</button>
+          <div class="sec-title">🔄 Uygulamalar arası taşıma</div>
+          <div class="about">Telefondaki / yayındaki uygulamada eklediklerini düzenleyiciye getirmek için orada <b>📤 Dışa aktar</b>, burada <b>📥 İçe aktar</b>. Aynı kayıtlar güncellenir, kopya oluşmaz.</div>
+          <div class="mo-ev-btns" style="margin-top:8px">
+            <button class="btn ghost sm" id="moAllOut">📤 Monia verisini dışa aktar</button>
+            <button class="btn ghost sm" id="moAllIn">📥 İçe aktar (birleştir)</button>
+            <button class="btn ghost sm" id="moDedupe">🧹 Kopyaları temizle</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
           <div class="sec-title" style="margin-top:0">🔑 Anahtar kelimeler</div>
           ${keywords().length ? kwSummary(null)
             : '<div class="about">Her karaktere takip etmek istediğin kelimeleri ekle; uygulama karakterin onları kaç kez söylediğini sayar, istersen geçtikleri mesajlara efekt ekler.</div>'}
@@ -3360,6 +3711,25 @@
     };
     if ($('#uPhotoRm')) $('#uPhotoRm').onclick = () => { u.photo = ''; save(); renderMe(); };
 
+    sysCheck().then(ok => {
+      const el = $('#sysStat');
+      if (!el) return;
+      el.className = 'sys-stat ' + (ok ? 'ok' : 'off');
+      el.textContent = ok ? '✅ Yerel sunucu bağlı: kayıtlar js/data/system.js dosyasına gider.' : '⚪ Yerel sunucu yok (bu ayar burada çalışmaz). yerel-duzenleme.bat ile aç.';
+      $('#sysNow').disabled = !ok;
+      $('#sysPull').disabled = !ok;
+    });
+    $('#sysOn').onchange = e => {
+      const c = sysCfg(); c.on = e.target.checked; sysCfg(c);
+      if (c.on) sysPush(true).catch(() => notify('Sistem kaydı yapılamadı', '⚠️'));
+    };
+    view.querySelectorAll('[data-systype]').forEach(cb => cb.onchange = () => { const c = sysCfg(); c.types[cb.dataset.systype] = cb.checked; sysCfg(c); });
+    $('#sysCats').onclick = () => catSheet();
+    $('#sysPull').onclick = () => sysPull().then(r => { if (!r) notify('Yerel sunucu yok: yerel-duzenleme.bat ile aç', '⚠️'); }, () => notify('Sistem dosyası okunamadı', '⚠️'));
+    $('#moAllOut').onclick = exportAllMonia;
+    $('#moAllIn').onclick = importScenarios;
+    $('#moDedupe').onclick = () => { const n = dedupeMonia(); save(); notify(n ? `${n} kopya silindi` : 'Kopya bulunamadı', '🧹'); };
+    $('#sysNow').onclick = () => sysPush(true).then(ok => { if (!ok) notify('Yerel sunucu yok: yerel-duzenleme.bat ile aç', '⚠️'); }, () => notify('Sistem kaydı yapılamadı', '⚠️'));
     $('#kwBtn').onclick = () => keywordSheet({ onChange:() => { const y = window.scrollY; renderMe(); window.scrollTo(0, y); } });
     $('[data-act=backup]').onclick = () => {
       const blob = new Blob([JSON.stringify({ format: 'amor-stories-backup', version: 1, state: S() })], { type: 'application/json' });
@@ -3412,6 +3782,7 @@
   }
 
   /* ---------- Başlat ---------- */
+  adoptSystem();
   window.addEventListener('hashchange', render);
   document.addEventListener('keydown', e => { if (ui.chatKeys) ui.chatKeys(e); });
   wideMQ.addEventListener('change', () => { if (['messages', 'chat'].includes(ui.route.name)) render(); });

@@ -22,6 +22,8 @@ Stories.MONIA = {
   seasons: ['İlkbahar', 'Yaz', 'Sonbahar', 'Kış'],
   // senaryo etiketleri (kendi etiketlerini senaryo düzenleyicide ekleyebilirsin)
   scTags: ['Romantik', 'Tutkulu', 'Komik', 'Dram', 'Gerilim', 'Gizem', 'Günlük', 'Fantastik', 'Ofis', 'Tatil'],
+  // olay etiketleri (olay editöründe kendi etiketini de yazabilirsin)
+  evTags: ['Başlangıç', 'Doruk', 'Final', 'Sürpriz', 'Yakınlaşma', 'Kavga', 'Barışma'],
   // olay editöründeki ton seçenekleri
   tones: ['Romantik', 'Tutkulu', 'Tatlı', 'Komik', 'Utangaç', 'Gergin', 'Kıskanç', 'Dramatik', 'Gizemli', 'Cesur', 'Hüzünlü'],
   cats: [
